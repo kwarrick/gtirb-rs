@@ -12,6 +12,7 @@ readme = "README.md"
 prost-build = "0.6.1"
 
 [dependencies]
+anyhow = "1.0.28"
 bytes = "0.5.4"
 prost = "0.6.1"
 uuid = "0.8.1"
