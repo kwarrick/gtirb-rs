@@ -10,9 +10,6 @@ use crate::{Module};
 use crate::proto;
 use crate::util::parse_uuid;
 
-// IR
-// -----------------------------------------------------------------------------
-
 #[derive(Debug)]
 pub struct IR {
     pub uuid: Uuid,
@@ -23,6 +20,14 @@ pub struct IR {
 }
 
 impl IR {
+    pub fn new() -> Self {
+        IR {
+            uuid: Uuid::new_v4(),
+            modules: Vec::new(),
+            version: 0,
+        }
+    }
+
     pub fn load_protobuf<P: AsRef<Path>>(path: P) -> Result<Self> {
         let bytes = std::fs::read(path)?;
         Ok(proto::Ir::decode(&*bytes)?.try_into()?)
@@ -58,3 +63,10 @@ pub fn read<P: AsRef<Path>>(path: P) -> Result<IR> {
     IR::load_protobuf(path)
 }
 
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn it_works() {
+        assert_eq!(2 + 2, 4);
+    }
+}

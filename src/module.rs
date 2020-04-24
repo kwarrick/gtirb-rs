@@ -14,9 +14,6 @@ use crate::{
 use crate::proto;
 use crate::util::parse_uuid;
 
-// Module
-// -----------------------------------------------------------------------------
-
 #[derive(Debug)]
 pub struct Module {
     pub uuid: Uuid,

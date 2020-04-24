@@ -4,12 +4,15 @@ use std::convert::TryInto;
 use anyhow::Result;
 use uuid::Uuid;
 
-use crate::{Block};
+use crate::{Addr, CodeBlock, DataBlock};
 use crate::proto;
 use crate::util::parse_uuid;
 
-// ByteInterval
-// -----------------------------------------------------------------------------
+#[derive(Debug)]
+pub enum Block {
+    CodeBlock(CodeBlock),
+    DataBlock(DataBlock),
+}
 
 #[derive(Debug)]
 pub struct ByteInterval {
@@ -17,7 +20,7 @@ pub struct ByteInterval {
     pub blocks: Vec<Block>,
     // pub symbolic_expressions: Vec<SymbolicExpression>,
     pub has_address: bool,
-    pub address: u64,
+    pub address: Addr,
     pub size: u64,
     pub contents: Vec<u8>,
 }
@@ -39,7 +42,7 @@ impl TryFrom<proto::ByteInterval> for ByteInterval {
             uuid: parse_uuid(&message.uuid)?,
             blocks: blocks,
             has_address: message.has_address,
-            address: message.address,
+            address: Addr(message.address),
             size: message.size,
             contents: message.contents,
         })
