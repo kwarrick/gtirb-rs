@@ -6,7 +6,7 @@ pub use proto::FileFormat;
 pub use proto::Isa as ISA;
 pub use proto::SectionFlag;
 
-struct Addr(u64);
+pub struct Addr(u64);
 
 mod ir;
 pub use crate::ir::IR;

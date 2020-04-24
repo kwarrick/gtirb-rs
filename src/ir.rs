@@ -6,6 +6,7 @@ use anyhow::Result;
 use prost::Message;
 use uuid::Uuid;
 
+use crate::{Module};
 use crate::proto;
 use crate::util::parse_uuid;
 
@@ -15,7 +16,7 @@ use crate::util::parse_uuid;
 #[derive(Debug)]
 pub struct IR {
     pub uuid: Uuid,
-    // pub modules: Vec<Module>,
+    pub modules: Vec<Module>,
     //TODO: aux_data
     pub version: u32,
     //TODO: cfg
@@ -43,11 +44,11 @@ impl IR {
 impl TryFrom<proto::Ir> for IR {
     type Error = anyhow::Error;
     fn try_from(message: proto::Ir) -> Result<Self> {
-        // let modules: Result<Vec<Module>> =
-        //     message.modules.into_iter().map(|m| m.try_into()).collect();
+        let modules: Result<Vec<Module>> =
+            message.modules.into_iter().map(|m| m.try_into()).collect();
         Ok(IR {
             uuid: parse_uuid(&message.uuid)?,
-            // modules: modules?,
+            modules: modules?,
             version: message.version,
         })
     }
