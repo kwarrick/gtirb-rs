@@ -1,6 +1,7 @@
 use std::ops::Deref;
 use std::collections::HashMap;
 use std::sync::{Arc,RwLock};
+use std::marker::PhantomData;
 
 use indextree::{Arena,NodeId};
 use uuid::Uuid;
@@ -33,13 +34,19 @@ struct Context {
     arena: Arena<GTIRB>,
 }
 
+trait ToUuid {
+    fn uuid(&self ) -> Uuid;
+}
+
 impl Context {
     fn append_node<T>(&mut self, parent: NodeId, child: T) -> NodeId
-    where T: Into<Uuid> + Into<GTIRB> + Clone
+    where T: ToUuid + Into<GTIRB> + Clone
     {
+        let uuid = child.uuid();
+
         // Add node to arena and index.
         let node = self.arena.new_node(child.clone().into());
-        self.index.insert(child.into(), node);
+        self.index.insert(uuid, node);
 
         // Append node to parent's children.
         parent.append(node, &mut self.arena);
@@ -51,17 +58,16 @@ impl Context {
 pub struct Node<T> {
     node: NodeId,
     ctx: Arc<RwLock<Context>>,
-    inner: T,
+    data: PhantomData<T>,
 }
 
-impl<T> Deref for Node<T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-
+// impl<T> Deref for Node<T> {
+//     type Target = T;
+//
+//     fn deref(&self) -> &Self::Target {
+//         &self.inner
+//     }
+// }
 
 // struct FilterOn<T> {
 //     node: Node<T>

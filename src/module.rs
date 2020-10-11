@@ -5,6 +5,8 @@
 use uuid::Uuid;
 
 use crate::{
+    ToUuid,
+    GTIRB,
     FileFormat,
     ISA,
     // ProxyBlock,
@@ -41,15 +43,15 @@ impl Module {
     //
 }
 
-impl From<Module> for Uuid {
-    fn from(module: Module) -> Self {
-        module.uuid()
+impl ToUuid for Module {
+    fn uuid(&self) -> Uuid {
+        self.uuid
     }
 }
 
-impl From<Module> for crate::GTIRB {
+impl From<Module> for GTIRB {
     fn from(module: Module) -> Self {
-        crate::GTIRB::Module(module)
+        GTIRB::Module(module)
     }
 }
 

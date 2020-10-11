@@ -3,6 +3,7 @@ use std::convert::TryInto;
 use std::path::Path;
 use std::collections::HashMap;
 use std::sync::{Arc,RwLock};
+use std::marker::PhantomData;
 
 use anyhow::Result;
 use prost::Message;
@@ -19,7 +20,7 @@ pub struct IR {
 }
 
 impl IR {
-    pub fn new() -> Node<Self> {
+    pub fn new<'a>() -> Node<Self> {
         // Create IR.
         let uuid = Uuid::new_v4();
         let ir = IR { uuid, version: 0 };
@@ -34,7 +35,7 @@ impl IR {
 
         let ctx = Arc::new(RwLock::new(Context { index, arena }));
 
-        Node { node, ctx, inner: ir }
+        Node { node, ctx, data: PhantomData }
     }
 
     fn version(&self) -> u32 {
@@ -48,9 +49,17 @@ impl IR {
 
 impl Node<IR> {
 
+    pub fn version(&self) -> u32 {
+        match self.ctx.read().unwrap().arena.get(self.node).unwrap().get()
+        {
+            GTIRB::IR(ir) => ir.version(),
+            _ => unreachable!(),
+        }
+    }
+
     pub fn add_module(&self, module: Module) -> Node<Module> {
         let node = self.ctx.write().unwrap().append_node(self.node, module.clone());
-        Node { node, ctx: self.ctx.clone(), inner: module}
+        Node { node, ctx: self.ctx.clone(), data: PhantomData}
     }
 
     // pub fn load_protobuf<P: AsRef<Path>>(path: P) -> Result<Self> {
