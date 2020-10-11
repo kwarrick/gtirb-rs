@@ -1,39 +1,64 @@
 use std::convert::TryFrom;
 use std::convert::TryInto;
 use std::path::Path;
+use std::collections::HashMap;
+use std::sync::{Arc,RwLock};
 
 use anyhow::Result;
 use prost::Message;
 use uuid::Uuid;
+use indextree::Arena;
 
-use crate::{Module};
-use crate::proto;
-use crate::util::parse_uuid;
+use crate::{proto,Module,Context,GTIRB,Node};
+// use crate::util::parse_uuid;
 
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub struct IR {
-    pub uuid: Uuid,
-    pub modules: Vec<Module>,
-    //TODO: aux_data
-    pub version: u32,
-    //TODO: cfg
+    uuid: Uuid,
+    version: u32,
 }
 
 impl IR {
-    pub fn new() -> Self {
-        IR {
-            uuid: Uuid::new_v4(),
-            modules: Vec::new(),
-            version: 0,
-        }
+    pub fn new() -> Node<Self> {
+        // Create IR.
+        let uuid = Uuid::new_v4();
+        let ir = IR { uuid, version: 0 };
+
+        // Create GTIRB arena.
+        let mut arena = Arena::new();
+        let node = arena.new_node(GTIRB::IR(ir.clone()));
+
+        // Create Node table and insert IR.
+        let mut index = HashMap::new();
+        index.insert(uuid, node);
+
+        let ctx = Arc::new(RwLock::new(Context { index, arena }));
+
+        Node { node, ctx, inner: ir }
     }
 
-    pub fn load_protobuf<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let bytes = std::fs::read(path)?;
-        Ok(proto::Ir::decode(&*bytes)?.try_into()?)
+    fn version(&self) -> u32 {
+        self.version
     }
 
-    // modules_on
+    fn uuid(&self) -> Uuid {
+        self.uuid
+    }
+}
+
+impl Node<IR> {
+
+    pub fn add_module(&self, module: Module) -> Node<Module> {
+        let node = self.ctx.write().unwrap().append_node(self.node, module.clone());
+        Node { node, ctx: self.ctx.clone(), inner: module}
+    }
+
+    // pub fn load_protobuf<P: AsRef<Path>>(path: P) -> Result<Self> {
+    //     let bytes = std::fs::read(path)?;
+    //     Ok(proto::Ir::decode(&*bytes)?.try_into()?)
+    // }
+
+    // fn modules_on(&self) -> FilterOn {}
     // modules_at
     // sections_on
     // sections_at
@@ -46,27 +71,30 @@ impl IR {
     // symbolic_expressions_at
 }
 
-impl TryFrom<proto::Ir> for IR {
-    type Error = anyhow::Error;
-    fn try_from(message: proto::Ir) -> Result<Self> {
-        let modules: Result<Vec<Module>> =
-            message.modules.into_iter().map(|m| m.try_into()).collect();
-        Ok(IR {
-            uuid: parse_uuid(&message.uuid)?,
-            modules: modules?,
-            version: message.version,
-        })
-    }
-}
+// impl TryFrom<proto::Ir> for IR {
+//     type Error = anyhow::Error;
+//     fn try_from(message: proto::Ir) -> Result<Self> {
+//         let modules: Result<Vec<Module>> =
+//             message.modules.into_iter().map(|m| m.try_into()).collect();
+//         Ok(IR {
+//             uuid: parse_uuid(&message.uuid)?,
+//             modules: modules?,
+//             version: message.version,
+//         })
+//     }
+// }
 
-pub fn read<P: AsRef<Path>>(path: P) -> Result<IR> {
-    IR::load_protobuf(path)
-}
+// pub fn read<P: AsRef<Path>>(path: P) -> Result<IR> {
+//     IR::load_protobuf(path)
+// }
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
+    fn new_ir() {
+        let ir = IR::new();
+        assert_eq!(ir.version(), 0);
     }
 }
