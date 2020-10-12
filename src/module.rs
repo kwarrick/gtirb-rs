@@ -4,16 +4,15 @@
 // use anyhow::{anyhow, Result};
 use uuid::Uuid;
 
+use crate::proto;
 use crate::{
-    ToUuid,
-    GTIRB,
     FileFormat,
+    Gtirb,
     ISA,
     // ProxyBlock,
     // Section,
     // Symbol,
 };
-use crate::proto;
 // use crate::util::parse_uuid;
 
 #[derive(Clone, Debug)]
@@ -41,18 +40,6 @@ impl Module {
     // address
     // size
     //
-}
-
-impl ToUuid for Module {
-    fn uuid(&self) -> Uuid {
-        self.uuid
-    }
-}
-
-impl From<Module> for GTIRB {
-    fn from(module: Module) -> Self {
-        GTIRB::Module(module)
-    }
 }
 
 // impl TryFrom<proto::Module> for Module {

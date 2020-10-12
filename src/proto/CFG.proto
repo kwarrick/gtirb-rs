@@ -13,7 +13,7 @@
 //
 //===----------------------------------------------------------------------===//
 syntax = "proto3";
-package proto;
+package gtirb.proto;
 option java_package = "com.grammatech.gtirb.proto";
 
 enum EdgeType {

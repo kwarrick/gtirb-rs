@@ -1,71 +1,92 @@
+use std::cell::{Ref, RefCell, RefMut};
 use std::convert::TryFrom;
 use std::convert::TryInto;
-use std::path::Path;
-use std::collections::HashMap;
-use std::sync::{Arc,RwLock};
 use std::marker::PhantomData;
+use std::path::Path;
+use std::rc::Rc;
 
 use anyhow::Result;
+use indextree::Arena;
 use prost::Message;
 use uuid::Uuid;
-use indextree::Arena;
 
-use crate::{proto,Module,Context,GTIRB,Node};
-// use crate::util::parse_uuid;
+use crate::{proto, Gtirb, Module, Node};
+use crate::util::parse_uuid;
 
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub struct IR {
     uuid: Uuid,
     version: u32,
 }
 
 impl IR {
-    pub fn new<'a>() -> Node<Self> {
-        // Create IR.
-        let uuid = Uuid::new_v4();
-        let ir = IR { uuid, version: 0 };
+    pub fn new() -> Node<IR> {
+        let ir = IR {
+            uuid: Uuid::new_v4(),
+            version: 0,
+        };
 
-        // Create GTIRB arena.
         let mut arena = Arena::new();
-        let node = arena.new_node(GTIRB::IR(ir.clone()));
+        let node_id = arena.new_node(Gtirb::IR(ir));
 
-        // Create Node table and insert IR.
-        let mut index = HashMap::new();
-        index.insert(uuid, node);
-
-        let ctx = Arc::new(RwLock::new(Context { index, arena }));
-
-        Node { node, ctx, data: PhantomData }
+        Node {
+            id: node_id,
+            arena: Rc::new(RefCell::new(Box::new(arena))),
+            data: PhantomData,
+        }
     }
 
-    fn version(&self) -> u32 {
-        self.version
-    }
-
-    fn uuid(&self) -> Uuid {
-        self.uuid
+    pub fn load_protobuf<P: AsRef<Path>>(path: P) -> Result<Node<IR>> {
+        let bytes = std::fs::read(path)?;
+        Ok(proto::Ir::decode(&*bytes)?.try_into()?)
     }
 }
 
 impl Node<IR> {
+    fn get(&self) -> Ref<IR> {
+        Ref::map(self.arena.borrow(), |a| {
+            if let Gtirb::IR(ir) = a.get(self.id).expect("IR node").get() {
+                ir
+            } else {
+                panic!("Expected GTIRB::IR node")
+            }
+        })
+    }
+
+    fn get_mut(&self) -> RefMut<IR> {
+        RefMut::map(self.arena.borrow_mut(), |a| {
+            if let Gtirb::IR(ir) =
+                a.get_mut(self.id).expect("IR node").get_mut()
+            {
+                ir
+            } else {
+                panic!("Expected GTIRB::IR node")
+            }
+        })
+    }
+
+    pub fn uuid(&self) -> Uuid {
+        self.get().uuid
+    }
 
     pub fn version(&self) -> u32 {
-        match self.ctx.read().unwrap().arena.get(self.node).unwrap().get()
-        {
-            GTIRB::IR(ir) => ir.version(),
-            _ => unreachable!(),
-        }
+        self.get().version
+    }
+
+    pub fn set_version(&self, n: u32) {
+        self.get_mut().version = n
     }
 
     pub fn add_module(&self, module: Module) -> Node<Module> {
-        let node = self.ctx.write().unwrap().append_node(self.node, module.clone());
-        Node { node, ctx: self.ctx.clone(), data: PhantomData}
+        let mut arena = self.arena.borrow_mut();
+        let module_node_id = arena.new_node(Gtirb::Module(module));
+        self.id.append(module_node_id, &mut arena);
+        Node {
+            id: module_node_id,
+            arena: self.arena.clone(),
+            data: PhantomData,
+        }
     }
-
-    // pub fn load_protobuf<P: AsRef<Path>>(path: P) -> Result<Self> {
-    //     let bytes = std::fs::read(path)?;
-    //     Ok(proto::Ir::decode(&*bytes)?.try_into()?)
-    // }
 
     // fn modules_on(&self) -> FilterOn {}
     // modules_at
@@ -78,32 +99,46 @@ impl Node<IR> {
     // data_blocks_on
     // data_blocks_at
     // symbolic_expressions_at
+
 }
 
-// impl TryFrom<proto::Ir> for IR {
-//     type Error = anyhow::Error;
-//     fn try_from(message: proto::Ir) -> Result<Self> {
-//         let modules: Result<Vec<Module>> =
-//             message.modules.into_iter().map(|m| m.try_into()).collect();
-//         Ok(IR {
-//             uuid: parse_uuid(&message.uuid)?,
-//             modules: modules?,
-//             version: message.version,
-//         })
-//     }
-// }
+impl TryFrom<proto::Ir> for Node<IR> {
+    type Error = anyhow::Error;
+    fn try_from(message: proto::Ir) -> Result<Node<IR>> {
+        let ir = IR {
+            uuid: parse_uuid(&message.uuid)?,
+            version: message.version,
+        };
 
-// pub fn read<P: AsRef<Path>>(path: P) -> Result<IR> {
-//     IR::load_protobuf(path)
-// }
+        let mut arena = Arena::new();
+        let node_id = arena.new_node(Gtirb::IR(ir));
+
+        Ok(Node {
+            id: node_id,
+            arena: Rc::new(RefCell::new(Box::new(arena))),
+            data: PhantomData,
+        })
+    }
+}
+
+pub fn read<P: AsRef<Path>>(path: P) -> Result<Node<IR>> {
+    IR::load_protobuf(path)
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn new_ir() {
+    fn set_ir_version() {
         let ir = IR::new();
         assert_eq!(ir.version(), 0);
+        ir.set_version(7);
+        assert_eq!(ir.version(), 7);
     }
+
+    // #[test]
+    // fn add_modules() {
+    //    let m1 = Module::new(...);
+    // }
 }

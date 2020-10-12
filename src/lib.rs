@@ -1,13 +1,11 @@
-use std::ops::Deref;
-use std::collections::HashMap;
-use std::sync::{Arc,RwLock};
+use std::cell::RefCell;
 use std::marker::PhantomData;
+use std::rc::Rc;
 
-use indextree::{Arena,NodeId};
-use uuid::Uuid;
+use indextree::{Arena, NodeId};
 
 mod proto {
-    include!(concat!(env!("OUT_DIR"), "/proto.rs"));
+    include!(concat!(env!("OUT_DIR"), "/gtirb.proto.rs"));
 }
 
 pub use proto::FileFormat;
@@ -23,57 +21,20 @@ pub use crate::ir::IR;
 mod module;
 pub use crate::module::Module;
 
-enum GTIRB {
+#[derive(Debug)]
+enum Gtirb {
     IR(IR),
     Module(Module),
 }
 
-#[derive(Default)]
-struct Context {
-    index: HashMap<Uuid,NodeId>,
-    arena: Arena<GTIRB>,
-}
-
-trait ToUuid {
-    fn uuid(&self ) -> Uuid;
-}
-
-impl Context {
-    fn append_node<T>(&mut self, parent: NodeId, child: T) -> NodeId
-    where T: ToUuid + Into<GTIRB> + Clone
-    {
-        let uuid = child.uuid();
-
-        // Add node to arena and index.
-        let node = self.arena.new_node(child.clone().into());
-        self.index.insert(uuid, node);
-
-        // Append node to parent's children.
-        parent.append(node, &mut self.arena);
-
-        node
-    }
-}
-
+#[derive(Debug)]
 pub struct Node<T> {
-    node: NodeId,
-    ctx: Arc<RwLock<Context>>,
+    id: NodeId,
+    arena: Rc<RefCell<Box<Arena<Gtirb>>>>,
     data: PhantomData<T>,
 }
 
-// impl<T> Deref for Node<T> {
-//     type Target = T;
-//
-//     fn deref(&self) -> &Self::Target {
-//         &self.inner
-//     }
-// }
-
-// struct FilterOn<T> {
-//     node: Node<T>
-// }
-
-// pub use crate::ir::read;
+pub use crate::ir::read;
 
 // mod section;
 // pub use crate::section::Section;
@@ -94,4 +55,4 @@ pub struct Node<T> {
 // mod symbol;
 // pub use crate::symbol::Symbol;
 
-// mod util;
+mod util;
