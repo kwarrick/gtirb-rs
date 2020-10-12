@@ -27,20 +27,15 @@ enum Gtirb {
     Module(Module),
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Node<T> {
     id: NodeId,
     arena: Rc<RefCell<Box<Arena<Gtirb>>>>,
     data: PhantomData<T>,
 }
 
-impl<T> Node<T> {
-    fn append_node(&self, parent: NodeId, node: Gtirb) -> NodeId {
-        let mut arena = self.arena.borrow_mut();
-        let node_id = arena.new_node(node);
-        parent.append(node_id, &mut arena);
-        node_id
-    }
+pub struct FollowingSiblings<T> {
+    node: Option<Node<T>>,
 }
 
 pub use crate::ir::read;

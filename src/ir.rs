@@ -8,7 +8,7 @@ use indextree::Arena;
 use prost::Message;
 use uuid::Uuid;
 
-use crate::{proto, Gtirb, Module, Node};
+use crate::{proto, Gtirb, Module, Node, FollowingSiblings};
 use crate::util::parse_uuid;
 
 #[derive(Debug, Clone)]
@@ -57,6 +57,24 @@ impl IR {
     }
 }
 
+impl Iterator for FollowingSiblings<Module> {
+    type Item = Node<Module>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let node = self.node.take();
+
+        if let Some(ref node) = node {
+            if let Some(id) = node.arena.borrow().get(node.id).expect("Module node").next_sibling() {
+                let mut sibling = node.clone();
+                sibling.id = id;
+                self.node.replace(sibling);
+            }
+        }
+
+        node
+    }
+}
+
 impl Node<IR> {
     fn get(&self) -> Ref<IR> {
         Ref::map(self.arena.borrow(), |a| {
@@ -101,6 +119,12 @@ impl Node<IR> {
             arena: self.arena.clone(),
             data: PhantomData,
         }
+    }
+
+    pub fn modules(&self) -> FollowingSiblings<Module> {
+        let node = self.arena.borrow().get(self.id).expect("IR node").first_child()
+            .map(|id| Node { id, arena: self.arena.clone(), data: PhantomData });
+        FollowingSiblings { node }
     }
 
     // fn modules_on(&self) -> FilterOn {}

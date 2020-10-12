@@ -1,9 +1,12 @@
+use std::cell::{Ref, RefCell, RefMut};
+
 use anyhow::{anyhow, Result};
 use indextree::{Arena, NodeId};
 use uuid::Uuid;
 
 use crate::proto;
 use crate::{
+    Node,
     FileFormat,
     Gtirb,
     ISA,
@@ -27,14 +30,6 @@ pub struct Module {
 }
 
 impl Module {
-    pub fn uuid(&self) -> Uuid {
-        self.uuid
-    }
-
-    pub fn binary_path(&self) -> &str {
-        &self.binary_path
-    }
-
     pub(crate) fn load_protobuf(arena: &mut Arena<Gtirb>, message: proto::Module) -> Result<NodeId> {
         let format = FileFormat::from_i32(message.file_format)
             .ok_or(anyhow!("Invalid FileFormat"))?;
@@ -65,3 +60,31 @@ impl Module {
     }
 }
 
+
+impl Node<Module> {
+    fn get(&self) -> Ref<Module> {
+        Ref::map(self.arena.borrow(), |a| {
+            if let Gtirb::Module(module) = a.get(self.id).expect("Module node").get() {
+                module
+            } else {
+                panic!("Expected Gtirb::Module node")
+            }
+        })
+    }
+
+    fn get_mut(&self) -> RefMut<Module> {
+        RefMut::map(self.arena.borrow_mut(), |a| {
+            if let Gtirb::Module(module) =
+                a.get_mut(self.id).expect("Module node").get_mut()
+            {
+                module
+            } else {
+                panic!("Expected Gtirb::Module node")
+            }
+        })
+    }
+
+    pub fn uuid(&self) -> Uuid {
+        self.get().uuid
+    }
+}
