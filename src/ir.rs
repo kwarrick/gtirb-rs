@@ -1,6 +1,4 @@
 use std::cell::{Ref, RefCell, RefMut};
-use std::convert::TryFrom;
-use std::convert::TryInto;
 use std::marker::PhantomData;
 use std::path::Path;
 use std::rc::Rc;
@@ -36,9 +34,26 @@ impl IR {
         }
     }
 
-    pub fn load_protobuf<P: AsRef<Path>>(path: P) -> Result<Node<IR>> {
-        let bytes = std::fs::read(path)?;
-        Ok(proto::Ir::decode(&*bytes)?.try_into()?)
+    pub(crate) fn load_protobuf(message: proto::Ir) -> Result<Node<IR>> {
+
+        let ir = IR {
+            uuid: parse_uuid(&message.uuid)?,
+            version: message.version,
+        };
+
+        let mut arena = Arena::new();
+        let ir_node_id = arena.new_node(Gtirb::IR(ir));
+
+        for module in message.modules.into_iter() {
+            let module_node_id = Module::load_protobuf(&mut arena, module)?;
+            ir_node_id.append(module_node_id, &mut arena);
+        }
+
+        Ok(Node {
+            id: ir_node_id,
+            arena: Rc::new(RefCell::new(Box::new(arena))),
+            data: PhantomData,
+        })
     }
 }
 
@@ -102,27 +117,9 @@ impl Node<IR> {
 
 }
 
-impl TryFrom<proto::Ir> for Node<IR> {
-    type Error = anyhow::Error;
-    fn try_from(message: proto::Ir) -> Result<Node<IR>> {
-        let ir = IR {
-            uuid: parse_uuid(&message.uuid)?,
-            version: message.version,
-        };
-
-        let mut arena = Arena::new();
-        let node_id = arena.new_node(Gtirb::IR(ir));
-
-        Ok(Node {
-            id: node_id,
-            arena: Rc::new(RefCell::new(Box::new(arena))),
-            data: PhantomData,
-        })
-    }
-}
-
 pub fn read<P: AsRef<Path>>(path: P) -> Result<Node<IR>> {
-    IR::load_protobuf(path)
+    let bytes = std::fs::read(path)?;
+    IR::load_protobuf(proto::Ir::decode(&*bytes)?)
 }
 
 #[cfg(test)]

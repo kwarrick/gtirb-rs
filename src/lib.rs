@@ -34,6 +34,15 @@ pub struct Node<T> {
     data: PhantomData<T>,
 }
 
+impl<T> Node<T> {
+    fn append_node(&self, parent: NodeId, node: Gtirb) -> NodeId {
+        let mut arena = self.arena.borrow_mut();
+        let node_id = arena.new_node(node);
+        parent.append(node_id, &mut arena);
+        node_id
+    }
+}
+
 pub use crate::ir::read;
 
 // mod section;
