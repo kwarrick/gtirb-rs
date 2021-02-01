@@ -18,35 +18,44 @@ impl IR {
         });
         Node {
             index,
-            context: Arc::new(RwLock::new(context)),
+            context: Rc::new(RefCell::new(context)),
             kind: PhantomData,
         }
     }
 }
 
 impl Node<IR> {
-    fn read<T, F: Fn(&IR) -> T>(&self, f: F) -> T {
-        f(&self.context.read().expect("read lock").ir[self.index])
+
+    fn borrow(&self) -> Ref<IR> {
+        Ref::map(self.context.borrow(), |ctx| {
+            &ctx.ir[self.index]
+        })
     }
 
-    fn write<T, F: Fn(&mut IR) -> T>(&self, f: F) -> T {
-        f(&mut self.context.write().expect("write lock").ir[self.index])
+    fn borrow_mut(&self) -> RefMut<IR> {
+        RefMut::map(self.context.borrow_mut(), |ctx| {
+            &mut ctx.ir[self.index]
+        })
     }
 
     pub fn uuid(&self) -> Uuid {
-        self.read(|ir| ir.uuid)
+        self.borrow().uuid
     }
 
     pub fn set_uuid(&self, uuid: Uuid) {
-        self.write(|ir| ir.uuid = uuid);
+        let mut context = self.context.borrow_mut();
+        let mut ir = self.borrow_mut();
+        context.uuid_map.remove(&ir.uuid);
+        context.uuid_map.insert(uuid, self.index);
+        ir.uuid = uuid;
     }
 
     pub fn version(&self) -> u32 {
-        self.read(|ir| ir.version)
+        self.borrow().version
     }
 
     pub fn set_version(&self, version: u32) {
-        self.write(|ir| ir.version = version)
+        self.borrow_mut().version = version
     }
 
     pub fn modules(&self) -> NodeIterator<Module> {
@@ -56,24 +65,25 @@ impl Node<IR> {
             context: self.context.clone(),
             kind: PhantomData,
         }
-    }
+     }
 
     pub fn add_module(&self, module: Module) {
-        let module = self
+        let index = self
             .context
-            .write()
-            .expect("write lock")
-            .module
-            .insert(module);
-        self.write(|ir| ir.modules.push(module));
+            .borrow_mut()
+            .add_module(module);
+        self.borrow_mut().modules.push(index);
     }
 }
+
 
 impl Iterator for NodeIterator<Module> {
     type Item = Node<Module>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let module = self.context.read().expect("read lock").ir[self.parent]
+        let module = self.context
+            .borrow()
+            .ir[self.parent]
             .modules
             .get(self.index)
             .cloned();
@@ -96,7 +106,7 @@ mod tests {
     fn can_create_new_ir() {
         let ir = IR::new();
         assert_eq!(ir.version(), 1);
-        assert_eq!(ir.modules().len(), 0);
+        assert_eq!(ir.modules().count(), 0);
     }
 
     #[test]
