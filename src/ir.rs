@@ -1,5 +1,6 @@
 use crate::*;
 
+#[derive(Debug)]
 pub(crate) struct IR {
     uuid: Uuid,
     modules: Vec<Index>,
@@ -58,11 +59,14 @@ impl Node<IR> {
         self.borrow_mut().version = version
     }
 
-    pub fn modules(&self) -> NodeIterator<Module> {
+    pub fn modules(&self) -> NodeIterator<IR, Module> {
         NodeIterator {
             index: 0,
-            parent: self.index,
-            context: self.context.clone(),
+            parent: Node {
+                index: self.index,
+                context: self.context.clone(),
+                kind: PhantomData
+            },
             kind: PhantomData,
         }
      }
@@ -74,27 +78,18 @@ impl Node<IR> {
             .add_module(module);
         self.borrow_mut().modules.push(index);
     }
+
 }
 
-
-impl Iterator for NodeIterator<Module> {
-    type Item = Node<Module>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let module = self.context
+impl Container<Module> for Node<IR> {
+    fn get(&self, index: usize) -> (Option<Index>, PhantomData<Module>) {
+        let module_index = self.context
             .borrow()
-            .ir[self.parent]
+            .ir[self.index]
             .modules
-            .get(self.index)
+            .get(index)
             .cloned();
-
-        self.index = self.index + 1;
-
-        module.map(|index| Node {
-            index,
-            context: self.context.clone(),
-            kind: PhantomData,
-        })
+        (module_index, PhantomData)
     }
 }
 

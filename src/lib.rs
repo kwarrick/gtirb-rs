@@ -10,32 +10,61 @@ mod ir;
 
 use ir::IR;
 
+#[derive(Debug, Clone)]
 struct Node<T> {
     index: Index,
     context: Rc<RefCell<Context>>,
     kind: PhantomData<T>,
 }
 
-struct NodeIterator<T> {
-    index: usize,
-    parent: Index,
-    context: Rc<RefCell<Context>>,
-    kind: PhantomData<T>,
+trait Container<T> {
+    fn get(&self, index: usize) -> (Option<Index>, PhantomData<T>);
 }
 
+struct NodeIterator<T,U> {
+    index: usize,
+    parent: Node<T>,
+    kind: PhantomData<U>,
+}
+
+impl<T,U> Iterator for NodeIterator<T,U> 
+where Node<T>: Container<U>
+{
+    type Item = Node<U>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let (child, _) = self.parent.get(self.index);
+        self.index += 1;
+        child.map(|index| Node {
+            index,
+            context: self.parent.context.clone(),
+            kind: PhantomData,
+        })
+    }
+
+}
+
+#[derive(Debug)]
 struct Module {
     uuid: Uuid,
 }
 
+#[derive(Debug)]
 struct Section;
+#[derive(Debug)]
 struct ByteInterval;
+#[derive(Debug)]
 struct DataBlock;
+#[derive(Debug)]
 struct CodeBlock;
+#[derive(Debug)]
 struct ProxyBlock;
+#[derive(Debug)]
 struct Symbol;
+#[derive(Debug)]
 struct SymbolicExpression;
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 struct Context {
     uuid_map: HashMap<Uuid,Index>,
 
