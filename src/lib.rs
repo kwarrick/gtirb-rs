@@ -17,18 +17,19 @@ struct Node<T> {
     kind: PhantomData<T>,
 }
 
-trait Container<T> {
-    fn get(&self, index: usize) -> (Option<Index>, PhantomData<T>);
-}
-
-struct NodeIterator<T,U> {
+struct NodeIterator<T, U> {
     index: usize,
     parent: Node<T>,
     kind: PhantomData<U>,
 }
 
-impl<T,U> Iterator for NodeIterator<T,U> 
-where Node<T>: Container<U>
+trait Container<T> {
+    fn get(&self, index: usize) -> (Option<Index>, PhantomData<T>);
+}
+
+impl<T, U> Iterator for NodeIterator<T, U>
+where
+    Node<T>: Container<U>,
 {
     type Item = Node<U>;
 
@@ -41,8 +42,55 @@ where Node<T>: Container<U>
             kind: PhantomData,
         })
     }
-
 }
+
+trait Indexed<T> {
+    fn get_ref(&self, index: (Index, PhantomData<T>)) -> Option<Ref<T>>;
+    fn get_ref_mut(&self, index: (Index, PhantomData<T>)) -> Option<RefMut<T>>;
+}
+
+trait Borrow<T> {
+    fn borrow(&self) -> Ref<T>;
+    fn borrow_mut(&self) -> RefMut<T>;
+}
+
+impl<T> Borrow<T> for Node<T>
+where
+    Node<T>: Indexed<T>,
+{
+    fn borrow(&self) -> Ref<T> {
+        self.get_ref((self.index, PhantomData))
+            .expect("indexed node")
+    }
+
+    fn borrow_mut(&self) -> RefMut<T> {
+        self.get_ref_mut((self.index, PhantomData))
+            .expect("indexed node")
+    }
+}
+
+trait Unique {
+    fn uuid(&self) -> Uuid;
+    fn set_uuid(&mut self, uuid: Uuid);
+}
+
+impl<T> Node<T>
+where Node<T>: Borrow<T>, T: Unique
+{
+
+    pub fn uuid(&self) -> Uuid {
+        self.borrow().uuid()
+    }
+
+    pub fn set_uuid(&self, uuid: Uuid) {
+        let mut context = self.context.borrow_mut();
+        let mut node = self.borrow_mut();
+        context.uuid_map.remove(&node.uuid());
+        context.uuid_map.insert(uuid, self.index);
+        node.set_uuid(uuid);
+    }
+}
+
 
 #[derive(Debug)]
 struct Module {
@@ -66,7 +114,7 @@ struct SymbolicExpression;
 
 #[derive(Debug, Default)]
 struct Context {
-    uuid_map: HashMap<Uuid,Index>,
+    uuid_map: HashMap<Uuid, Index>,
 
     ir: Arena<IR>,
     module: Arena<Module>,

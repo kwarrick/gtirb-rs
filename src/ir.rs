@@ -1,12 +1,20 @@
 use crate::*;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub(crate) struct IR {
     uuid: Uuid,
     modules: Vec<Index>,
     version: u32,
-    // cfg
-    // aux_data
+}
+
+impl Unique for IR {
+    fn uuid(&self) -> Uuid {
+        self.uuid
+    }
+
+    fn set_uuid(&mut self, uuid: Uuid) {
+        self.uuid = uuid;
+    }
 }
 
 impl IR {
@@ -26,29 +34,25 @@ impl IR {
 }
 
 impl Node<IR> {
-
-    fn borrow(&self) -> Ref<IR> {
-        Ref::map(self.context.borrow(), |ctx| {
-            &ctx.ir[self.index]
-        })
-    }
-
-    fn borrow_mut(&self) -> RefMut<IR> {
-        RefMut::map(self.context.borrow_mut(), |ctx| {
-            &mut ctx.ir[self.index]
-        })
-    }
-
-    pub fn uuid(&self) -> Uuid {
-        self.borrow().uuid
-    }
-
-    pub fn set_uuid(&self, uuid: Uuid) {
-        let mut context = self.context.borrow_mut();
-        let mut ir = self.borrow_mut();
-        context.uuid_map.remove(&ir.uuid);
-        context.uuid_map.insert(uuid, self.index);
-        ir.uuid = uuid;
+    fn find_node<U>(&self, uuid: Uuid) -> Option<Node<U>>
+    where
+        Node<U>: Indexed<U>,
+        U: Unique,
+    {
+        self.context
+            .borrow()
+            .uuid_map
+            .get(&uuid)
+            .map(|index| Node {
+                index: *index,
+                context: self.context.clone(),
+                kind: PhantomData,
+            })
+            .filter(|node| {
+                node.get_ref((node.index, PhantomData))
+                    .map(|inner| inner.uuid() != uuid)
+                    .unwrap_or(true)
+            })
     }
 
     pub fn version(&self) -> u32 {
@@ -65,27 +69,47 @@ impl Node<IR> {
             parent: Node {
                 index: self.index,
                 context: self.context.clone(),
-                kind: PhantomData
+                kind: PhantomData,
             },
             kind: PhantomData,
         }
-     }
-
-    pub fn add_module(&self, module: Module) {
-        let index = self
-            .context
-            .borrow_mut()
-            .add_module(module);
-        self.borrow_mut().modules.push(index);
     }
 
+    pub fn add_module(&self, module: Module) {
+        let index = self.context.borrow_mut().add_module(module);
+        self.borrow_mut().modules.push(index);
+    }
+}
+
+impl Indexed<IR> for Node<IR> {
+    fn get_ref(
+        &self,
+        (index, _): (Index, PhantomData<IR>)
+    ) -> Option<Ref<IR>> {
+        let context = self.context.borrow();
+        if context.ir.contains(index) {
+            Some(Ref::map(context, |ctx| &ctx.ir[index]))
+        } else {
+            None
+        }
+    }
+
+    fn get_ref_mut(
+        &self,
+        (index, _): (Index, PhantomData<IR>),
+    ) -> Option<RefMut<IR>> {
+        let context = self.context.borrow_mut();
+        if context.ir.contains(index) {
+            Some(RefMut::map(context, |ctx| &mut ctx.ir[index]))
+        } else {
+            None
+        }
+    }
 }
 
 impl Container<Module> for Node<IR> {
     fn get(&self, index: usize) -> (Option<Index>, PhantomData<Module>) {
-        let module_index = self.context
-            .borrow()
-            .ir[self.index]
+        let module_index = self.context.borrow().ir[self.index]
             .modules
             .get(index)
             .cloned();
