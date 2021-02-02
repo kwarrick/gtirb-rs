@@ -7,8 +7,10 @@ use generational_arena::{Arena, Index};
 use uuid::Uuid;
 
 mod ir;
+mod module;
 
 use ir::IR;
+use module::Module;
 
 #[derive(Debug, Clone)]
 struct Node<T> {
@@ -91,12 +93,6 @@ where Node<T>: Borrow<T>, T: Unique
     }
 }
 
-
-#[derive(Debug)]
-struct Module {
-    uuid: Uuid,
-}
-
 #[derive(Debug)]
 struct Section;
 #[derive(Debug)]
@@ -133,7 +129,7 @@ impl Context {
     }
 
     fn add_module(&mut self, module: Module) -> Index {
-        let uuid = module.uuid.clone();
+        let uuid = module.uuid();
         let index = self.module.insert(module);
         self.uuid_map.insert(uuid, index);
         index
