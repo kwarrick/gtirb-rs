@@ -50,8 +50,8 @@ impl Node<IR> {
             })
             .filter(|node| {
                 node.get_ref((node.index, PhantomData))
-                    .map(|inner| inner.uuid() != uuid)
-                    .unwrap_or(true)
+                    .map(|inner| inner.uuid() == uuid)
+                    .unwrap_or(false)
             })
     }
 
@@ -119,7 +119,7 @@ impl Container<Module> for Node<IR> {
 
 #[cfg(test)]
 mod tests {
-    use super::IR;
+    use super::*;
 
     #[test]
     fn can_create_new_ir() {
@@ -133,5 +133,16 @@ mod tests {
         let ir = IR::new();
         ir.set_version(42);
         assert_eq!(ir.version(), 42);
+    }
+
+    #[test]
+    fn can_find_node_by_uuid() {
+        let ir = IR::new();
+        let module = Module::new();
+        let uuid = module.uuid();
+        ir.add_module(module);
+        let node: Option<Node<Module>> = ir.find_node(uuid);
+        assert!(node.is_some());
+        assert_eq!(uuid, node.unwrap().uuid());
     }
 }

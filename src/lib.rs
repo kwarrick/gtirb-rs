@@ -9,8 +9,8 @@ use uuid::Uuid;
 mod ir;
 mod module;
 
-use ir::IR;
-use module::Module;
+use ir::*;
+use module::*;
 
 #[derive(Debug, Clone)]
 struct Node<T> {
