@@ -123,45 +123,45 @@ impl Node<Module> {
         self.borrow().rebase_delta != 0
     }
 
-    pub fn sections(&self) -> NodeIterator<IR, Section> {
-        NodeIterator {
-            index: 0,
-            parent: Node {
-                index: self.index,
-                context: self.context.clone(),
-                kind: PhantomData,
-            },
-            kind: PhantomData,
-        }
-    }
+    // pub fn sections(&self) -> NodeIterator<IR, Section> {
+    //     NodeIterator {
+    //         index: 0,
+    //         parent: Node {
+    //             index: self.index,
+    //             context: self.context.clone(),
+    //             kind: PhantomData,
+    //         },
+    //         kind: PhantomData,
+    //     }
+    // }
 
-    pub fn add_section(&self, section: Section) {
-        let uuid = section.uuid();
+    // pub fn add_section(&self, section: Section) {
+    //     let uuid = section.uuid();
 
-        let mut section = section;
-        section.parent.replace(self.index);
+    //     let mut section = section;
+    //     section.parent.replace(self.index);
 
-        let index = {
-            let mut context = self.context.borrow_mut();
-            let index = context.section.insert(section);
-            context.uuid_map.insert(uuid, index);
-            index
-        };
+    //     let index = {
+    //         let mut context = self.context.borrow_mut();
+    //         let index = context.section.insert(section);
+    //         context.uuid_map.insert(uuid, index);
+    //         index
+    //     };
 
-        self.borrow_mut().sections.push(index);
-    }
+    //     self.borrow_mut().sections.push(index);
+    // }
 
-    pub fn remove_section(&self, node: Node<Section>) {
-        let (index, uuid) = { (node.index, node.uuid()) };
-        // Remove Section from Module.
-        self.remove((node.index, PhantomData));
-        // Remove Section from Context.
-        {
-            let mut context = self.context.borrow_mut();
-            context.uuid_map.remove(&uuid);
-            context.section.remove(index);
-        }
-    }
+    // pub fn remove_section(&self, node: Node<Section>) {
+    //     let (index, uuid) = { (node.index, node.uuid()) };
+    //     // Remove Section from Module.
+    //     self.remove((node.index, PhantomData));
+    //     // Remove Section from Context.
+    //     {
+    //         let mut context = self.context.borrow_mut();
+    //         context.uuid_map.remove(&uuid);
+    //         context.section.remove(index);
+    //     }
+    // }
 
     // TODO:
     // size
@@ -184,47 +184,21 @@ impl Node<Module> {
 }
 
 impl Indexed<Module> for Node<Module> {
-    fn get_ref(
-        &self,
-        (index, _): (Index, PhantomData<Module>),
-    ) -> Option<Ref<Module>> {
-        let context = self.context.borrow();
-        if context.module.contains(index) {
-            Some(Ref::map(context, |ctx| &ctx.module[index]))
-        } else {
-            None
-        }
+    fn arena(&self) -> Ref<Arena<Module>> {
+        Ref::map(self.context.borrow(), |ctx| &ctx.module)
     }
-
-    fn get_ref_mut(
-        &self,
-        (index, _): (Index, PhantomData<Module>),
-    ) -> Option<RefMut<Module>> {
-        let context = self.context.borrow_mut();
-        if context.module.contains(index) {
-            Some(RefMut::map(context, |ctx| &mut ctx.module[index]))
-        } else {
-            None
-        }
+    fn arena_mut(&self) -> RefMut<Arena<Module>> {
+        RefMut::map(self.context.borrow_mut(), |ctx| &mut ctx.module)
     }
 }
 
-impl Container<Section> for Node<Module> {
-    fn get(&self, position: usize) -> (Option<Index>, PhantomData<Section>) {
-        let index = self
-            .get_ref((self.index, PhantomData))
-            .unwrap()
-            .sections
-            .get(position)
-            .cloned();
-        (index, PhantomData)
+impl Child<IR> for Node<Module> {
+    fn parent(&self) -> (Option<Index>, PhantomData<IR>) {
+        (self.borrow().parent, PhantomData)
     }
 
-    fn remove(&self, (index, _): (Index, PhantomData<Section>)) {
-        let mut ir = self.get_ref_mut((self.index, PhantomData)).unwrap();
-        if let Some(position) = ir.sections.iter().position(|i| *i == index) {
-            ir.sections.remove(position);
-        }
+    fn set_parent(&self, (index, _): (Index, PhantomData<IR>)) {
+        self.borrow_mut().parent.replace(index);
     }
 }
 

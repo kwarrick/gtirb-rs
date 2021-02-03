@@ -18,26 +18,41 @@ use ir::*;
 mod module;
 use module::*;
 
-mod section;
-use section::*;
+// mod section;
+// use section::*;
 
-mod byte_interval;
-use byte_interval::*;
+// mod byte_interval;
+// use byte_interval::*;
 
-mod code_block;
-use code_block::*;
+// mod code_block;
+// use code_block::*;
 
-mod data_block;
-use data_block::*;
+// mod data_block;
+// use data_block::*;
 
-mod proxy_block;
-use proxy_block::*;
+// mod proxy_block;
+// use proxy_block::*;
 
-mod symbol;
-use symbol::*;
+// mod symbol;
+// use symbol::*;
 
-mod symbolic_expression;
-use symbolic_expression::*;
+// mod symbolic_expression;
+// use symbolic_expression::*;
+
+#[derive(Debug)]
+struct Section;
+#[derive(Debug)]
+struct ByteInterval;
+#[derive(Debug)]
+struct DataBlock;
+#[derive(Debug)]
+struct CodeBlock;
+#[derive(Debug)]
+struct ProxyBlock;
+#[derive(Debug)]
+struct Symbol;
+#[derive(Debug)]
+struct SymbolicExpression;
 
 #[derive(Clone, Debug)]
 struct Node<T> {
@@ -47,25 +62,90 @@ struct Node<T> {
 }
 
 struct NodeIterator<T, U> {
-    index: usize,
+    position: usize,
     parent: Node<T>,
     kind: PhantomData<U>,
 }
 
-trait Container<T> {
-    fn get(&self, position: usize) -> (Option<Index>, PhantomData<T>);
-    fn remove(&self, index: (Index, PhantomData<T>));
+trait Child<T> {
+    fn parent(&self) -> (Option<Index>, PhantomData<T>);
+    fn set_parent(&self, index: (Index, PhantomData<T>));
+}
+
+trait Parent<T> {
+    fn nodes(&self) -> Ref<Vec<Index>>;
+    fn nodes_mut(&self) -> RefMut<Vec<Index>>;
+
+    fn node_arena(&self) -> Ref<Arena<T>>;
+    fn node_arena_mut(&self) -> RefMut<Arena<T>>;
+}
+
+impl<T> Node<T> {
+    pub fn node_iter<U>(&self) -> NodeIterator<T, U> {
+        NodeIterator {
+            position: 0,
+            parent: Node {
+                index: self.index,
+                context: self.context.clone(),
+                kind: PhantomData,
+            },
+            kind: PhantomData,
+        }
+    }
+
+    pub fn add_node<U: Unique>(&self, node: U) -> Node<U>
+    where
+        Node<U>: Child<T>,
+        Node<T>: Parent<U>,
+    {
+        // Add node to Context.
+        let uuid = node.uuid();
+        let index = self.node_arena_mut().insert(node);
+        self.context.borrow_mut().uuid_map.insert(uuid, index);
+
+        // Add node to Parent.
+        self.nodes_mut().push(index);
+
+        let node = Node {
+            index,
+            context: self.context.clone(),
+            kind: PhantomData,
+        };
+
+        // Update parent
+        node.set_parent((self.index, PhantomData));
+        node
+    }
+
+    pub fn remove_node<U: Unique>(&self, node: Node<U>)
+    where
+        Node<T>: Parent<U>,
+        Node<U>: Child<T>,
+        Node<U>: Indexed<U>,
+    {
+        // Consume node.
+        let (index, uuid) = { (node.index, node.uuid()) };
+
+        // Remove Module from IR.
+        self.node_arena_mut().remove(node.index);
+        let position = self.nodes().iter().position(|i| *i == index).unwrap();
+        self.nodes_mut().remove(position);
+
+        // Remove Module from Context.
+        self.node_arena_mut().remove(index);
+        self.context.borrow_mut().uuid_map.remove(&uuid);
+    }
 }
 
 impl<T, U> Iterator for NodeIterator<T, U>
 where
-    Node<T>: Container<U>,
+    Node<T>: Parent<U>,
 {
     type Item = Node<U>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let (child, _) = self.parent.get(self.index);
-        self.index += 1;
+        let child = self.parent.nodes().get(self.position).cloned();
+        self.position += 1;
         child.map(|index| Node {
             index,
             context: self.parent.context.clone(),
@@ -75,27 +155,22 @@ where
 }
 
 trait Indexed<T> {
-    fn get_ref(&self, index: (Index, PhantomData<T>)) -> Option<Ref<T>>;
-    fn get_ref_mut(&self, index: (Index, PhantomData<T>)) -> Option<RefMut<T>>;
+    fn arena(&self) -> Ref<Arena<T>>;
+    fn arena_mut(&self) -> RefMut<Arena<T>>;
 }
 
-trait Borrow<T> {
-    fn borrow(&self) -> Ref<T>;
-    fn borrow_mut(&self) -> RefMut<T>;
-}
-
-impl<T> Borrow<T> for Node<T>
+impl<T> Node<T>
 where
     Node<T>: Indexed<T>,
 {
     fn borrow(&self) -> Ref<T> {
-        self.get_ref((self.index, PhantomData))
-            .expect("indexed node")
+        Ref::map(self.arena(), |a| a.get(self.index).expect("indexed node"))
     }
 
     fn borrow_mut(&self) -> RefMut<T> {
-        self.get_ref_mut((self.index, PhantomData))
-            .expect("indexed node")
+        RefMut::map(self.arena_mut(), |a| {
+            a.get_mut(self.index).expect("indexed node")
+        })
     }
 }
 
@@ -106,7 +181,7 @@ trait Unique {
 
 impl<T> Node<T>
 where
-    Node<T>: Borrow<T>,
+    Node<T>: Indexed<T>,
     T: Unique,
 {
     pub fn uuid(&self) -> Uuid {
@@ -124,14 +199,11 @@ where
 
 impl<T> PartialEq for Node<T>
 where
-    Node<T>: Indexed<T> + Borrow<T>,
+    Node<T>: Indexed<T>,
     T: PartialEq,
 {
     fn eq(&self, other: &Self) -> bool {
-        match (
-            self.get_ref((self.index, PhantomData)),
-            other.get_ref((other.index, PhantomData)),
-        ) {
+        match (self.arena().get(self.index), other.arena().get(other.index)) {
             (Some(a), Some(b)) => *a == *b,
             _ => false,
         }

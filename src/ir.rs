@@ -48,11 +48,8 @@ impl Node<IR> {
                 context: self.context.clone(),
                 kind: PhantomData,
             })
-            .filter(|node| {
-                node.get_ref((node.index, PhantomData))
-                    .map(|inner| inner.uuid() == uuid)
-                    .unwrap_or(false)
-            })
+            .filter(|node| node.arena().contains(node.index))
+            .filter(|node| node.borrow().uuid() == uuid)
     }
 
     pub fn version(&self) -> u32 {
@@ -64,91 +61,41 @@ impl Node<IR> {
     }
 
     pub fn modules(&self) -> NodeIterator<IR, Module> {
-        NodeIterator {
-            index: 0,
-            parent: Node {
-                index: self.index,
-                context: self.context.clone(),
-                kind: PhantomData,
-            },
-            kind: PhantomData,
-        }
+        self.node_iter()
     }
 
     pub fn add_module(&self, module: Module) -> Node<Module> {
-        let uuid = module.uuid();
-
-        let mut module = module;
-        module.parent.replace(self.index);
-
-        let index = {
-            let mut context = self.context.borrow_mut();
-            let index = context.module.insert(module);
-            context.uuid_map.insert(uuid, index);
-            index
-        };
-
-        self.borrow_mut().modules.push(index);
-
-        Node {
-            index,
-            context: self.context.clone(),
-            kind: PhantomData,
-        }
+        self.add_node(module)
     }
 
     pub fn remove_module(&self, node: Node<Module>) {
-        let (index, uuid) = { (node.index, node.uuid()) };
-        // Remove Module from IR.
-        self.remove((node.index, PhantomData));
-        // Remove Module from Context.
-        {
-            let mut context = self.context.borrow_mut();
-            context.uuid_map.remove(&uuid);
-            context.module.remove(index);
-        }
+        self.remove_node(node);
     }
 }
 
 impl Indexed<IR> for Node<IR> {
-    fn get_ref(&self, (index, _): (Index, PhantomData<IR>)) -> Option<Ref<IR>> {
-        let context = self.context.borrow();
-        if context.ir.contains(index) {
-            Some(Ref::map(context, |ctx| &ctx.ir[index]))
-        } else {
-            None
-        }
+    fn arena(&self) -> Ref<Arena<IR>> {
+        Ref::map(self.context.borrow(), |ctx| &ctx.ir)
     }
-
-    fn get_ref_mut(
-        &self,
-        (index, _): (Index, PhantomData<IR>),
-    ) -> Option<RefMut<IR>> {
-        let context = self.context.borrow_mut();
-        if context.ir.contains(index) {
-            Some(RefMut::map(context, |ctx| &mut ctx.ir[index]))
-        } else {
-            None
-        }
+    fn arena_mut(&self) -> RefMut<Arena<IR>> {
+        RefMut::map(self.context.borrow_mut(), |ctx| &mut ctx.ir)
     }
 }
 
-impl Container<Module> for Node<IR> {
-    fn get(&self, position: usize) -> (Option<Index>, PhantomData<Module>) {
-        let index = self
-            .get_ref((self.index, PhantomData))
-            .unwrap()
-            .modules
-            .get(position)
-            .cloned();
-        (index, PhantomData)
+impl Parent<Module> for Node<IR> {
+    fn nodes(&self) -> Ref<Vec<Index>> {
+        Ref::map(self.borrow(), |ir| &ir.modules)
     }
 
-    fn remove(&self, (index, _): (Index, PhantomData<Module>)) {
-        let mut ir = self.get_ref_mut((self.index, PhantomData)).unwrap();
-        if let Some(position) = ir.modules.iter().position(|i| *i == index) {
-            ir.modules.remove(position);
-        }
+    fn nodes_mut(&self) -> RefMut<Vec<Index>> {
+        RefMut::map(self.borrow_mut(), |ir| &mut ir.modules)
+    }
+
+    fn node_arena(&self) -> Ref<Arena<Module>> {
+        Ref::map(self.context.borrow(), |ctx| &ctx.module)
+    }
+    fn node_arena_mut(&self) -> RefMut<Arena<Module>> {
+        RefMut::map(self.context.borrow_mut(), |ctx| &mut ctx.module)
     }
 }
 
