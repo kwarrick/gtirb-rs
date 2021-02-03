@@ -75,7 +75,7 @@ impl Node<IR> {
         }
     }
 
-    pub fn add_module(&self, module: Module) {
+    pub fn add_module(&self, module: Module) -> Node<Module> {
         let uuid = module.uuid();
 
         let mut module = module;
@@ -89,19 +89,18 @@ impl Node<IR> {
         };
 
         self.borrow_mut().modules.push(index);
+
+        Node {
+            index,
+            context: self.context.clone(),
+            kind: PhantomData,
+        }
     }
 
     pub fn remove_module(&self, node: Node<Module>) {
-        let (index, uuid) = {
-            (node.index, node.uuid())
-        };
+        let (index, uuid) = { (node.index, node.uuid()) };
         // Remove Module from IR.
-        {
-            let mut ir = self.borrow_mut();
-            if let Some(index) = ir.modules.iter().position(|i| *i == index) {
-                ir.modules.remove(index);
-            }
-        }
+        self.remove((node.index, PhantomData));
         // Remove Module from Context.
         {
             let mut context = self.context.borrow_mut();
@@ -135,12 +134,21 @@ impl Indexed<IR> for Node<IR> {
 }
 
 impl Container<Module> for Node<IR> {
-    fn get(&self, index: usize) -> (Option<Index>, PhantomData<Module>) {
-        let module_index = self.context.borrow().ir[self.index]
+    fn get(&self, position: usize) -> (Option<Index>, PhantomData<Module>) {
+        let index = self
+            .get_ref((self.index, PhantomData))
+            .unwrap()
             .modules
-            .get(index)
+            .get(position)
             .cloned();
-        (module_index, PhantomData)
+        (index, PhantomData)
+    }
+
+    fn remove(&self, (index, _): (Index, PhantomData<Module>)) {
+        let mut ir = self.get_ref_mut((self.index, PhantomData)).unwrap();
+        if let Some(position) = ir.modules.iter().position(|i| *i == index) {
+            ir.modules.remove(position);
+        }
     }
 }
 
@@ -181,12 +189,12 @@ mod tests {
     fn can_remove_module() {
         let ir = IR::new();
         let module = Module::new("dummy");
+        let module = ir.add_module(module);
         let uuid = module.uuid();
-        ir.add_module(module);
-        let module = ir.modules().nth(0);
-        assert!(module.is_some());
-        ir.remove_module(module.unwrap());
+
+        ir.remove_module(module);
         assert_eq!(ir.modules().count(), 0);
+
         let node: Option<Node<Module>> = ir.find_node(uuid);
         assert!(node.is_none());
     }

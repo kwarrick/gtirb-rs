@@ -18,6 +18,9 @@ use ir::*;
 mod module;
 use module::*;
 
+mod section;
+use section::*;
+
 #[derive(Clone, Debug)]
 struct Node<T> {
     index: Index,
@@ -32,7 +35,8 @@ struct NodeIterator<T, U> {
 }
 
 trait Container<T> {
-    fn get(&self, index: usize) -> (Option<Index>, PhantomData<T>);
+    fn get(&self, position: usize) -> (Option<Index>, PhantomData<T>);
+    fn remove(&self, index: (Index, PhantomData<T>));
 }
 
 impl<T, U> Iterator for NodeIterator<T, U>
@@ -116,8 +120,6 @@ where
     }
 }
 
-#[derive(Debug)]
-struct Section;
 #[derive(Debug)]
 struct ByteInterval;
 #[derive(Debug)]

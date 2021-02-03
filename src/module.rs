@@ -130,13 +130,49 @@ impl Node<Module> {
         self.borrow().rebase_delta != 0
     }
 
-    // TODO:
-    // get_size
-    // get_address
+    pub fn sections(&self) -> NodeIterator<IR, Section> {
+        NodeIterator {
+            index: 0,
+            parent: Node {
+                index: self.index,
+                context: self.context.clone(),
+                kind: PhantomData,
+            },
+            kind: PhantomData,
+        }
+    }
 
-    // sections()
-    // add_section()
-    // remove_section()
+    pub fn add_section(&self, section: Section) {
+        let uuid = section.uuid();
+
+        let mut section = section;
+        section.set_module(self.index);
+
+        let index = {
+            let mut context = self.context.borrow_mut();
+            let index = context.section.insert(section);
+            context.uuid_map.insert(uuid, index);
+            index
+        };
+
+        self.borrow_mut().sections.push(index);
+    }
+
+    pub fn remove_section(&self, node: Node<Section>) {
+        let (index, uuid) = { (node.index, node.uuid()) };
+        // Remove Section from Module.
+        self.remove((node.index, PhantomData));
+        // Remove Section from Context.
+        {
+            let mut context = self.context.borrow_mut();
+            context.uuid_map.remove(&uuid);
+            context.section.remove(index);
+        }
+    }
+
+    // TODO:
+    // size
+    // address
 
     // code_blocks()
     // add_code_block
@@ -186,6 +222,25 @@ impl Indexed<Module> for Node<Module> {
     }
 }
 
+impl Container<Section> for Node<Module> {
+    fn get(&self, position: usize) -> (Option<Index>, PhantomData<Section>) {
+        let index = self
+            .get_ref((self.index, PhantomData))
+            .unwrap()
+            .sections
+            .get(position)
+            .cloned();
+        (index, PhantomData)
+    }
+
+    fn remove(&self, (index, _): (Index, PhantomData<Section>)) {
+        let mut ir = self.get_ref_mut((self.index, PhantomData)).unwrap();
+        if let Some(position) = ir.sections.iter().position(|i| *i == index) {
+            ir.sections.remove(position);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -193,5 +248,13 @@ mod tests {
     #[test]
     fn new_module_is_unique() {
         assert_ne!(Module::new("a"), Module::new("a"));
+    }
+
+    #[test]
+    fn can_add_new_section() {
+        let ir = IR::new();
+        let module = Module::new("dummy");
+        let module = ir.add_module(module);
+        assert_eq!(module.ir(), ir);
     }
 }
