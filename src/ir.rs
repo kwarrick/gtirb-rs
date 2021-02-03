@@ -76,10 +76,38 @@ impl Node<IR> {
     }
 
     pub fn add_module(&self, module: Module) {
+        let uuid = module.uuid();
+
         let mut module = module;
         module.set_ir(self.index);
-        let index = self.context.borrow_mut().add_module(module);
+
+        let index = {
+            let mut context = self.context.borrow_mut();
+            let index = context.module.insert(module);
+            context.uuid_map.insert(uuid, index);
+            index
+        };
+
         self.borrow_mut().modules.push(index);
+    }
+
+    pub fn remove_module(&self, node: Node<Module>) {
+        let (index, uuid) = {
+            (node.index, node.uuid())
+        };
+        // Remove Module from IR.
+        {
+            let mut ir = self.borrow_mut();
+            if let Some(index) = ir.modules.iter().position(|i| *i == index) {
+                ir.modules.remove(index);
+            }
+        }
+        // Remove Module from Context.
+        {
+            let mut context = self.context.borrow_mut();
+            context.uuid_map.remove(&uuid);
+            context.module.remove(index);
+        }
     }
 }
 
@@ -147,6 +175,20 @@ mod tests {
         let module = ir.modules().nth(0);
         assert!(module.is_some());
         assert_eq!(module.unwrap().ir(), ir);
+    }
+
+    #[test]
+    fn can_remove_module() {
+        let ir = IR::new();
+        let module = Module::new("dummy");
+        let uuid = module.uuid();
+        ir.add_module(module);
+        let module = ir.modules().nth(0);
+        assert!(module.is_some());
+        ir.remove_module(module.unwrap());
+        assert_eq!(ir.modules().count(), 0);
+        let node: Option<Node<Module>> = ir.find_node(uuid);
+        assert!(node.is_none());
     }
 
     #[test]

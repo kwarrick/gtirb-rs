@@ -150,11 +150,4 @@ impl Context {
     fn new() -> Self {
         Default::default()
     }
-
-    fn add_module(&mut self, module: Module) -> Index {
-        let uuid = module.uuid();
-        let index = self.module.insert(module);
-        self.uuid_map.insert(uuid, index);
-        index
-    }
 }
