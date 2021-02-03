@@ -2,6 +2,8 @@ use crate::*;
 
 #[derive(Debug, Default, PartialEq)]
 pub(crate) struct Module {
+    pub(crate) parent: Option<Index>,
+
     uuid: Uuid,
     name: String,
     binary_path: String,
@@ -14,7 +16,6 @@ pub(crate) struct Module {
     sections: Vec<Index>,
     symbols: Vec<Index>,
     proxies: Vec<Index>,
-    ir: Option<Index>,
 }
 
 impl Module {
@@ -24,14 +25,6 @@ impl Module {
             name: name.to_owned(),
             ..Default::default()
         }
-    }
-
-    pub fn ir(&self) -> Option<Index> {
-        self.ir
-    }
-
-    pub fn set_ir(&mut self, index: Index) {
-        self.ir.replace(index);
     }
 }
 
@@ -48,14 +41,14 @@ impl Unique for Module {
 impl Node<Module> {
     pub fn ir(&self) -> Node<IR> {
         Node {
-            index: self.borrow().ir().unwrap(),
+            index: self.borrow().parent.expect("parent node"),
             context: self.context.clone(),
             kind: PhantomData,
         }
     }
 
     pub fn set_ir(&self, ir: Node<IR>) {
-        self.borrow_mut().set_ir(ir.index);
+        self.borrow_mut().parent.replace(ir.index);
     }
 
     pub fn name(&self) -> String {
@@ -146,7 +139,7 @@ impl Node<Module> {
         let uuid = section.uuid();
 
         let mut section = section;
-        section.set_module(self.index);
+        section.parent.replace(self.index);
 
         let index = {
             let mut context = self.context.borrow_mut();

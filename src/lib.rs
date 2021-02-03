@@ -21,6 +21,18 @@ use module::*;
 mod section;
 use section::*;
 
+mod byte_interval;
+use byte_interval::*;
+
+mod code_block;
+use code_block::*;
+
+mod data_block;
+use data_block::*;
+
+mod proxy_block;
+use proxy_block::*;
+
 #[derive(Clone, Debug)]
 struct Node<T> {
     index: Index,
@@ -121,14 +133,6 @@ where
 }
 
 #[derive(Debug)]
-struct ByteInterval;
-#[derive(Debug)]
-struct DataBlock;
-#[derive(Debug)]
-struct CodeBlock;
-#[derive(Debug)]
-struct ProxyBlock;
-#[derive(Debug)]
 struct Symbol;
 #[derive(Debug)]
 struct SymbolicExpression;
@@ -141,8 +145,8 @@ struct Context {
     module: Arena<Module>,
     section: Arena<Section>,
     byte_interval: Arena<ByteInterval>,
-    code_block: Arena<DataBlock>,
-    data_block: Arena<CodeBlock>,
+    code_block: Arena<CodeBlock>,
+    data_block: Arena<DataBlock>,
     proxy_block: Arena<ProxyBlock>,
     symbol: Arena<Symbol>,
     symbolic_expression: Arena<SymbolicExpression>,

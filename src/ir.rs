@@ -79,7 +79,7 @@ impl Node<IR> {
         let uuid = module.uuid();
 
         let mut module = module;
-        module.set_ir(self.index);
+        module.parent.replace(self.index);
 
         let index = {
             let mut context = self.context.borrow_mut();
