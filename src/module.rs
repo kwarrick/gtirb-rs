@@ -168,12 +168,9 @@ impl Node<Module> {
     // address
 
     // code_blocks()
-    // add_code_block
-    // remove_code_block
-
     // data_blocks()
-    // add_data_block
-    // remove_data_block
+    // byte_intervals()
+    // symbolic_expressions()
 
     // proxy_blocks()
     // add_proxy_block
@@ -182,9 +179,6 @@ impl Node<Module> {
     // symbols()
     // add_symbol()
     // remove_symbol()
-
-    // byte_intervals()
-    // symbolic_expressions()
 
     // get_symbol_reference<T>(symbol: Symbol) -> Node<T>
 }

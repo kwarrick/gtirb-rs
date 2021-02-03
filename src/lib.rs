@@ -33,6 +33,12 @@ use data_block::*;
 mod proxy_block;
 use proxy_block::*;
 
+mod symbol;
+use symbol::*;
+
+mod symbolic_expression;
+use symbolic_expression::*;
+
 #[derive(Clone, Debug)]
 struct Node<T> {
     index: Index,
@@ -131,11 +137,6 @@ where
         }
     }
 }
-
-#[derive(Debug)]
-struct Symbol;
-#[derive(Debug)]
-struct SymbolicExpression;
 
 #[derive(Debug, Default)]
 struct Context {

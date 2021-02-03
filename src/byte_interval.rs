@@ -28,7 +28,15 @@ impl Unique for ByteInterval {
     }
 }
 
-impl Node<ByteInterval> {}
+impl Node<ByteInterval> {
+    // code_blocks()
+    // add_code_block
+    // remove_code_block
+
+    // data_blocks()
+    // add_data_block
+    // remove_data_block
+}
 
 impl Indexed<ByteInterval> for Node<ByteInterval> {
     fn get_ref(
