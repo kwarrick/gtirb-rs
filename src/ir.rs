@@ -1,6 +1,6 @@
 use crate::*;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Default, PartialEq)]
 pub(crate) struct IR {
     uuid: Uuid,
     modules: Vec<Index>,
@@ -76,16 +76,15 @@ impl Node<IR> {
     }
 
     pub fn add_module(&self, module: Module) {
+        let mut module = module;
+        module.set_ir(self.index);
         let index = self.context.borrow_mut().add_module(module);
         self.borrow_mut().modules.push(index);
     }
 }
 
 impl Indexed<IR> for Node<IR> {
-    fn get_ref(
-        &self,
-        (index, _): (Index, PhantomData<IR>)
-    ) -> Option<Ref<IR>> {
+    fn get_ref(&self, (index, _): (Index, PhantomData<IR>)) -> Option<Ref<IR>> {
         let context = self.context.borrow();
         if context.ir.contains(index) {
             Some(Ref::map(context, |ctx| &ctx.ir[index]))
@@ -129,6 +128,11 @@ mod tests {
     }
 
     #[test]
+    fn new_ir_is_unique() {
+        assert_ne!(IR::new(), IR::new());
+    }
+
+    #[test]
     fn can_set_version() {
         let ir = IR::new();
         ir.set_version(42);
@@ -136,9 +140,19 @@ mod tests {
     }
 
     #[test]
+    fn can_add_new_module() {
+        let ir = IR::new();
+        let module = Module::new("dummy");
+        ir.add_module(module);
+        let module = ir.modules().nth(0);
+        assert!(module.is_some());
+        assert_eq!(module.unwrap().ir(), ir);
+    }
+
+    #[test]
     fn can_find_node_by_uuid() {
         let ir = IR::new();
-        let module = Module::new();
+        let module = Module::new("dummy");
         let uuid = module.uuid();
         ir.add_module(module);
         let node: Option<Node<Module>> = ir.find_node(uuid);

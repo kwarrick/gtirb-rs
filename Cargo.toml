@@ -4,6 +4,10 @@ version = "0.1.0"
 authors = ["Kevin Warrick <kevinjwarrick@gmail.com>"]
 edition = "2018"
 
+[build-dependencies]
+prost-build = "0.7.0"
+
 [dependencies]
 generational-arena = "0.2.8"
+prost = "0.7.0"
 uuid = { version = "0.8.1", features = ["v4"] }

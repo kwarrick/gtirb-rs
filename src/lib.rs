@@ -6,13 +6,19 @@ use std::rc::Rc;
 use generational_arena::{Arena, Index};
 use uuid::Uuid;
 
-mod ir;
-mod module;
+mod proto {
+    include!(concat!(env!("OUT_DIR"), "/gtirb.proto.rs"));
+}
 
+pub use proto::{ByteOrder, FileFormat, Isa as ISA, SectionFlag};
+
+mod ir;
 use ir::*;
+
+mod module;
 use module::*;
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 struct Node<T> {
     index: Index,
     context: Rc<RefCell<Context>>,
@@ -77,9 +83,10 @@ trait Unique {
 }
 
 impl<T> Node<T>
-where Node<T>: Borrow<T>, T: Unique
+where
+    Node<T>: Borrow<T>,
+    T: Unique,
 {
-
     pub fn uuid(&self) -> Uuid {
         self.borrow().uuid()
     }
@@ -90,6 +97,22 @@ where Node<T>: Borrow<T>, T: Unique
         context.uuid_map.remove(&node.uuid());
         context.uuid_map.insert(uuid, self.index);
         node.set_uuid(uuid);
+    }
+}
+
+impl<T> PartialEq for Node<T>
+where
+    Node<T>: Indexed<T> + Borrow<T>,
+    T: PartialEq,
+{
+    fn eq(&self, other: &Self) -> bool {
+        match (
+            self.get_ref((self.index, PhantomData)),
+            other.get_ref((other.index, PhantomData)),
+        ) {
+            (Some(a), Some(b)) => *a == *b,
+            _ => false,
+        }
     }
 }
 
