@@ -187,6 +187,7 @@ impl Indexed<Module> for Node<Module> {
     fn arena(&self) -> Ref<Arena<Module>> {
         Ref::map(self.context.borrow(), |ctx| &ctx.module)
     }
+
     fn arena_mut(&self) -> RefMut<Arena<Module>> {
         RefMut::map(self.context.borrow_mut(), |ctx| &mut ctx.module)
     }

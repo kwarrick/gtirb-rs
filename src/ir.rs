@@ -99,6 +99,36 @@ impl Parent<Module> for Node<IR> {
     }
 }
 
+use std::slice::Iter;
+
+pub struct NodeIterator_<'a, T: 'a> {
+    index: Ref<'a, [Index]>,
+    arena: Ref<'a, Arena<T>>,
+}
+
+impl<'a, T: 'a> Iterator for NodeIterator_<'a, T> {
+    type Item = Ref<'a, T>;
+
+    fn next(&mut self) -> Option<Ref<'a, T>> {
+        if self.index.len() == 0 {
+            return None;
+        }
+        let (head, tail) =
+            Ref::map_split(Ref::clone(&self.index), |slice| slice.split_at(1));
+        self.index = tail;
+        Some(Ref::map(Ref::clone(&self.arena), |arena| &arena[head[0]]))
+    }
+}
+
+impl Node<IR> {
+    pub fn modules_(&self) -> NodeIterator_<Module> {
+        NodeIterator_ {
+            index: Ref::map(self.nodes(), |nodes| &nodes[..]),
+            arena: self.node_arena(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
