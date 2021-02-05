@@ -71,7 +71,7 @@ impl Node<Module> {
         self.borrow().file_format
     }
 
-    pub fn set_file_format(&mut self, file_format: FileFormat) {
+    pub fn set_file_format(&self, file_format: FileFormat) {
         self.borrow_mut().file_format = file_format;
     }
 
@@ -79,7 +79,7 @@ impl Node<Module> {
         self.borrow().isa
     }
 
-    pub fn set_isa(&mut self, isa: ISA) {
+    pub fn set_isa(&self, isa: ISA) {
         self.borrow_mut().isa = isa;
     }
 
@@ -91,7 +91,7 @@ impl Node<Module> {
         })
     }
 
-    pub fn set_entry_point(&mut self, block: Node<CodeBlock>) {
+    pub fn set_entry_point(&self, block: Node<CodeBlock>) {
         self.borrow_mut().entry_point.replace(block.index);
     }
 
@@ -99,7 +99,7 @@ impl Node<Module> {
         self.borrow().byte_order
     }
 
-    pub fn set_byte_order(&mut self, byte_order: ByteOrder) {
+    pub fn set_byte_order(&self, byte_order: ByteOrder) {
         self.borrow_mut().byte_order = byte_order;
     }
 
@@ -107,7 +107,7 @@ impl Node<Module> {
         self.borrow().preferred_address
     }
 
-    pub fn set_preferred_address(&mut self, preferred_address: u64) {
+    pub fn set_preferred_address(&self, preferred_address: u64) {
         self.borrow_mut().preferred_address = preferred_address;
     }
 
@@ -115,7 +115,7 @@ impl Node<Module> {
         self.borrow().rebase_delta
     }
 
-    pub fn set_rebase_delta(&mut self, rebase_delta: i64) {
+    pub fn set_rebase_delta(&self, rebase_delta: i64) {
         self.borrow_mut().rebase_delta = rebase_delta;
     }
 
