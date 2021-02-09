@@ -3,8 +3,8 @@ use crate::*;
 #[derive(Debug, Default, PartialEq)]
 pub(crate) struct IR {
     uuid: Uuid,
-    modules: Vec<Index>,
     version: u32,
+    modules: Vec<Index>,
 }
 
 impl Unique for IR {
@@ -160,11 +160,11 @@ mod tests {
     #[test]
     fn can_modify_modules() {
         let ir = IR::new();
-        let foo = ir.add_module(Module::new("foo"));
-        let bar = ir.add_module(Module::new("bar"));
+        ir.add_module(Module::new("foo"));
+        ir.add_module(Module::new("bar"));
         for module in ir.modules() {
-            module.set_preferred_address(1);
+            module.set_preferred_address(Addr(1));
         }
-        assert!(ir.modules().all(|m| m.preferred_address() == 1));
+        assert!(ir.modules().all(|m| m.preferred_address() == 1.into()));
     }
 }

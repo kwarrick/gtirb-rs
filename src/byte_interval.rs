@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::*;
 
 #[derive(Default, Debug, PartialEq)]
@@ -7,7 +9,7 @@ pub(crate) struct ByteInterval {
     uuid: Uuid,
     code_blocks: Vec<Index>,
     data_blocks: Vec<Index>,
-    symbolic_expressions: HashMap<u64, Index>,
+    symbolic_expressions: HashMap<u64, SymbolicExpression>,
 }
 
 impl ByteInterval {

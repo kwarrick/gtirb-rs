@@ -11,7 +11,7 @@ pub(crate) struct Module {
     byte_order: ByteOrder,
     isa: ISA,
     rebase_delta: i64,
-    preferred_address: u64,
+    preferred_address: Addr,
     file_format: FileFormat,
     sections: Vec<Index>,
     symbols: Vec<Index>,
@@ -103,11 +103,11 @@ impl Node<Module> {
         self.borrow_mut().byte_order = byte_order;
     }
 
-    pub fn preferred_address(&self) -> u64 {
+    pub fn preferred_address(&self) -> Addr {
         self.borrow().preferred_address
     }
 
-    pub fn set_preferred_address(&self, preferred_address: u64) {
+    pub fn set_preferred_address(&self, preferred_address: Addr) {
         self.borrow_mut().preferred_address = preferred_address;
     }
 

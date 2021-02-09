@@ -12,6 +12,9 @@ mod proto {
 
 pub use proto::{ByteOrder, FileFormat, Isa as ISA, SectionFlag};
 
+mod addr;
+use addr::*;
+
 mod ir;
 use ir::*;
 
@@ -36,11 +39,8 @@ use proxy_block::*;
 mod symbol;
 use symbol::*;
 
-// mod symbolic_expression;
-// use symbolic_expression::*;
-
-#[derive(Debug)]
-struct SymbolicExpression;
+mod symbolic_expression;
+use symbolic_expression::*;
 
 #[derive(Clone, Debug)]
 struct Node<T> {
@@ -210,7 +210,6 @@ struct Context {
     data_block: Arena<DataBlock>,
     proxy_block: Arena<ProxyBlock>,
     symbol: Arena<Symbol>,
-    symbolic_expression: Arena<SymbolicExpression>,
 }
 
 impl Context {
