@@ -1,3 +1,8 @@
+use std::path::Path;
+
+use anyhow::Result;
+use prost::Message;
+
 use crate::*;
 
 #[derive(Debug, Default, PartialEq)]
@@ -30,6 +35,15 @@ impl IR {
             context: Rc::new(RefCell::new(context)),
             kind: PhantomData,
         }
+    }
+
+    pub fn read<P: AsRef<Path>>(path: P) -> Result<Node<IR>> {
+        let bytes = std::fs::read(path)?;
+        IR::load_protobuf(proto::Ir::decode(&*bytes)?)
+    }
+
+    fn load_protobuf(message: proto::Ir) -> Result<Node<IR>> {
+        Ok(IR::new())
     }
 }
 
