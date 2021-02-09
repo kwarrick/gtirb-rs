@@ -29,27 +29,21 @@ impl Unique for CodeBlock {
 impl Node<CodeBlock> {}
 
 impl Indexed<CodeBlock> for Node<CodeBlock> {
-    fn get_ref(
-        &self,
-        (index, _): (Index, PhantomData<CodeBlock>),
-    ) -> Option<Ref<CodeBlock>> {
-        let context = self.context.borrow();
-        if context.code_block.contains(index) {
-            Some(Ref::map(context, |ctx| &ctx.code_block[index]))
-        } else {
-            None
-        }
+    fn arena(&self) -> Ref<Arena<CodeBlock>> {
+        Ref::map(self.context.borrow(), |ctx| &ctx.code_block)
     }
 
-    fn get_ref_mut(
-        &self,
-        (index, _): (Index, PhantomData<CodeBlock>),
-    ) -> Option<RefMut<CodeBlock>> {
-        let context = self.context.borrow_mut();
-        if context.code_block.contains(index) {
-            Some(RefMut::map(context, |ctx| &mut ctx.code_block[index]))
-        } else {
-            None
-        }
+    fn arena_mut(&self) -> RefMut<Arena<CodeBlock>> {
+        RefMut::map(self.context.borrow_mut(), |ctx| &mut ctx.code_block)
+    }
+}
+
+impl Child<ByteInterval> for Node<CodeBlock> {
+    fn parent(&self) -> (Option<Index>, PhantomData<ByteInterval>) {
+        (self.borrow().parent, PhantomData)
+    }
+
+    fn set_parent(&self, (index, _): (Index, PhantomData<ByteInterval>)) {
+        self.borrow_mut().parent.replace(index);
     }
 }

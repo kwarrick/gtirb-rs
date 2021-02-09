@@ -18,39 +18,27 @@ use ir::*;
 mod module;
 use module::*;
 
-// mod section;
-// use section::*;
+mod section;
+use section::*;
 
-// mod byte_interval;
-// use byte_interval::*;
+mod byte_interval;
+use byte_interval::*;
 
-// mod code_block;
-// use code_block::*;
+mod code_block;
+use code_block::*;
 
-// mod data_block;
-// use data_block::*;
+mod data_block;
+use data_block::*;
 
-// mod proxy_block;
-// use proxy_block::*;
+mod proxy_block;
+use proxy_block::*;
 
-// mod symbol;
-// use symbol::*;
+mod symbol;
+use symbol::*;
 
 // mod symbolic_expression;
 // use symbolic_expression::*;
 
-#[derive(Debug)]
-struct Section;
-#[derive(Debug)]
-struct ByteInterval;
-#[derive(Debug)]
-struct DataBlock;
-#[derive(Debug)]
-struct CodeBlock;
-#[derive(Debug)]
-struct ProxyBlock;
-#[derive(Debug)]
-struct Symbol;
 #[derive(Debug)]
 struct SymbolicExpression;
 
@@ -126,12 +114,12 @@ impl<T> Node<T> {
         // Consume node.
         let (index, uuid) = { (node.index, node.uuid()) };
 
-        // Remove Module from IR.
+        // Remove Child from Parent.
         self.node_arena_mut().remove(node.index);
         let position = self.nodes().iter().position(|i| *i == index).unwrap();
         self.nodes_mut().remove(position);
 
-        // Remove Module from Context.
+        // Remove Child from Context.
         self.node_arena_mut().remove(index);
         self.context.borrow_mut().uuid_map.remove(&uuid);
     }

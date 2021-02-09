@@ -7,6 +7,7 @@ pub(crate) struct ByteInterval {
     uuid: Uuid,
     code_blocks: Vec<Index>,
     data_blocks: Vec<Index>,
+    symbolic_expressions: HashMap<u64, Index>,
 }
 
 impl ByteInterval {
@@ -29,37 +30,83 @@ impl Unique for ByteInterval {
 }
 
 impl Node<ByteInterval> {
-    // code_blocks()
-    // add_code_block
-    // remove_code_block
+    pub fn code_blocks(&self) -> NodeIterator<ByteInterval, CodeBlock> {
+        self.node_iter()
+    }
 
-    // data_blocks()
-    // add_data_block
-    // remove_data_block
+    pub fn add_code_block(&self, code_block: CodeBlock) -> Node<CodeBlock> {
+        self.add_node(code_block)
+    }
+
+    pub fn remove_code_block(&self, node: Node<CodeBlock>) {
+        self.remove_node(node);
+    }
+
+    pub fn data_blocks(&self) -> NodeIterator<ByteInterval, DataBlock> {
+        self.node_iter()
+    }
+
+    pub fn add_data_block(&self, data_block: DataBlock) -> Node<DataBlock> {
+        self.add_node(data_block)
+    }
+
+    pub fn remove_data_block(&self, node: Node<DataBlock>) {
+        self.remove_node(node);
+    }
 }
 
 impl Indexed<ByteInterval> for Node<ByteInterval> {
-    fn get_ref(
-        &self,
-        (index, _): (Index, PhantomData<ByteInterval>),
-    ) -> Option<Ref<ByteInterval>> {
-        let context = self.context.borrow();
-        if context.byte_interval.contains(index) {
-            Some(Ref::map(context, |ctx| &ctx.byte_interval[index]))
-        } else {
-            None
-        }
+    fn arena(&self) -> Ref<Arena<ByteInterval>> {
+        Ref::map(self.context.borrow(), |ctx| &ctx.byte_interval)
     }
 
-    fn get_ref_mut(
-        &self,
-        (index, _): (Index, PhantomData<ByteInterval>),
-    ) -> Option<RefMut<ByteInterval>> {
-        let context = self.context.borrow_mut();
-        if context.byte_interval.contains(index) {
-            Some(RefMut::map(context, |ctx| &mut ctx.byte_interval[index]))
-        } else {
-            None
-        }
+    fn arena_mut(&self) -> RefMut<Arena<ByteInterval>> {
+        RefMut::map(self.context.borrow_mut(), |ctx| &mut ctx.byte_interval)
+    }
+}
+
+impl Child<Section> for Node<ByteInterval> {
+    fn parent(&self) -> (Option<Index>, PhantomData<Section>) {
+        (self.borrow().parent, PhantomData)
+    }
+
+    fn set_parent(&self, (index, _): (Index, PhantomData<Section>)) {
+        self.borrow_mut().parent.replace(index);
+    }
+}
+
+impl Parent<CodeBlock> for Node<ByteInterval> {
+    fn nodes(&self) -> Ref<Vec<Index>> {
+        Ref::map(self.borrow(), |interval| &interval.code_blocks)
+    }
+
+    fn nodes_mut(&self) -> RefMut<Vec<Index>> {
+        RefMut::map(self.borrow_mut(), |interval| &mut interval.code_blocks)
+    }
+
+    fn node_arena(&self) -> Ref<Arena<CodeBlock>> {
+        Ref::map(self.context.borrow(), |ctx| &ctx.code_block)
+    }
+
+    fn node_arena_mut(&self) -> RefMut<Arena<CodeBlock>> {
+        RefMut::map(self.context.borrow_mut(), |ctx| &mut ctx.code_block)
+    }
+}
+
+impl Parent<DataBlock> for Node<ByteInterval> {
+    fn nodes(&self) -> Ref<Vec<Index>> {
+        Ref::map(self.borrow(), |interval| &interval.data_blocks)
+    }
+
+    fn nodes_mut(&self) -> RefMut<Vec<Index>> {
+        RefMut::map(self.borrow_mut(), |interval| &mut interval.data_blocks)
+    }
+
+    fn node_arena(&self) -> Ref<Arena<DataBlock>> {
+        Ref::map(self.context.borrow(), |ctx| &ctx.data_block)
+    }
+
+    fn node_arena_mut(&self) -> RefMut<Arena<DataBlock>> {
+        RefMut::map(self.context.borrow_mut(), |ctx| &mut ctx.data_block)
     }
 }

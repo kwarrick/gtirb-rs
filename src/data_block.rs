@@ -29,27 +29,21 @@ impl Unique for DataBlock {
 impl Node<DataBlock> {}
 
 impl Indexed<DataBlock> for Node<DataBlock> {
-    fn get_ref(
-        &self,
-        (index, _): (Index, PhantomData<DataBlock>),
-    ) -> Option<Ref<DataBlock>> {
-        let context = self.context.borrow();
-        if context.data_block.contains(index) {
-            Some(Ref::map(context, |ctx| &ctx.data_block[index]))
-        } else {
-            None
-        }
+    fn arena(&self) -> Ref<Arena<DataBlock>> {
+        Ref::map(self.context.borrow(), |ctx| &ctx.data_block)
     }
 
-    fn get_ref_mut(
-        &self,
-        (index, _): (Index, PhantomData<DataBlock>),
-    ) -> Option<RefMut<DataBlock>> {
-        let context = self.context.borrow_mut();
-        if context.data_block.contains(index) {
-            Some(RefMut::map(context, |ctx| &mut ctx.data_block[index]))
-        } else {
-            None
-        }
+    fn arena_mut(&self) -> RefMut<Arena<DataBlock>> {
+        RefMut::map(self.context.borrow_mut(), |ctx| &mut ctx.data_block)
+    }
+}
+
+impl Child<ByteInterval> for Node<DataBlock> {
+    fn parent(&self) -> (Option<Index>, PhantomData<ByteInterval>) {
+        (self.borrow().parent, PhantomData)
+    }
+
+    fn set_parent(&self, (index, _): (Index, PhantomData<ByteInterval>)) {
+        self.borrow_mut().parent.replace(index);
     }
 }

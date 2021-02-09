@@ -15,7 +15,7 @@ pub(crate) struct Module {
     file_format: FileFormat,
     sections: Vec<Index>,
     symbols: Vec<Index>,
-    proxies: Vec<Index>,
+    proxy_blocks: Vec<Index>,
 }
 
 impl Module {
@@ -123,45 +123,41 @@ impl Node<Module> {
         self.borrow().rebase_delta != 0
     }
 
-    // pub fn sections(&self) -> NodeIterator<IR, Section> {
-    //     NodeIterator {
-    //         index: 0,
-    //         parent: Node {
-    //             index: self.index,
-    //             context: self.context.clone(),
-    //             kind: PhantomData,
-    //         },
-    //         kind: PhantomData,
-    //     }
-    // }
+    pub fn sections(&self) -> NodeIterator<Module, Section> {
+        self.node_iter()
+    }
 
-    // pub fn add_section(&self, section: Section) {
-    //     let uuid = section.uuid();
+    pub fn add_section(&self, section: Section) -> Node<Section> {
+        self.add_node(section)
+    }
 
-    //     let mut section = section;
-    //     section.parent.replace(self.index);
+    pub fn remove_section(&self, node: Node<Section>) {
+        self.remove_node(node);
+    }
 
-    //     let index = {
-    //         let mut context = self.context.borrow_mut();
-    //         let index = context.section.insert(section);
-    //         context.uuid_map.insert(uuid, index);
-    //         index
-    //     };
+    pub fn proxy_blocks(&self) -> NodeIterator<Module, ProxyBlock> {
+        self.node_iter()
+    }
 
-    //     self.borrow_mut().sections.push(index);
-    // }
+    pub fn add_proxy_block(&self, proxy_block: ProxyBlock) -> Node<ProxyBlock> {
+        self.add_node(proxy_block)
+    }
 
-    // pub fn remove_section(&self, node: Node<Section>) {
-    //     let (index, uuid) = { (node.index, node.uuid()) };
-    //     // Remove Section from Module.
-    //     self.remove((node.index, PhantomData));
-    //     // Remove Section from Context.
-    //     {
-    //         let mut context = self.context.borrow_mut();
-    //         context.uuid_map.remove(&uuid);
-    //         context.section.remove(index);
-    //     }
-    // }
+    pub fn remove_proxy_block(&self, node: Node<ProxyBlock>) {
+        self.remove_node(node);
+    }
+
+    pub fn symbols(&self) -> NodeIterator<Module, Symbol> {
+        self.node_iter()
+    }
+
+    pub fn add_symbol(&self, symbol: Symbol) -> Node<Symbol> {
+        self.add_node(symbol)
+    }
+
+    pub fn remove_symbol(&self, node: Node<Symbol>) {
+        self.remove_node(node);
+    }
 
     // TODO:
     // size
@@ -171,10 +167,6 @@ impl Node<Module> {
     // data_blocks()
     // byte_intervals()
     // symbolic_expressions()
-
-    // proxy_blocks()
-    // add_proxy_block
-    // remove_proxy_block
 
     // symbols()
     // add_symbol()
@@ -200,6 +192,60 @@ impl Child<IR> for Node<Module> {
 
     fn set_parent(&self, (index, _): (Index, PhantomData<IR>)) {
         self.borrow_mut().parent.replace(index);
+    }
+}
+
+impl Parent<Section> for Node<Module> {
+    fn nodes(&self) -> Ref<Vec<Index>> {
+        Ref::map(self.borrow(), |module| &module.sections)
+    }
+
+    fn nodes_mut(&self) -> RefMut<Vec<Index>> {
+        RefMut::map(self.borrow_mut(), |module| &mut module.sections)
+    }
+
+    fn node_arena(&self) -> Ref<Arena<Section>> {
+        Ref::map(self.context.borrow(), |ctx| &ctx.section)
+    }
+
+    fn node_arena_mut(&self) -> RefMut<Arena<Section>> {
+        RefMut::map(self.context.borrow_mut(), |ctx| &mut ctx.section)
+    }
+}
+
+impl Parent<ProxyBlock> for Node<Module> {
+    fn nodes(&self) -> Ref<Vec<Index>> {
+        Ref::map(self.borrow(), |module| &module.proxy_blocks)
+    }
+
+    fn nodes_mut(&self) -> RefMut<Vec<Index>> {
+        RefMut::map(self.borrow_mut(), |module| &mut module.proxy_blocks)
+    }
+
+    fn node_arena(&self) -> Ref<Arena<ProxyBlock>> {
+        Ref::map(self.context.borrow(), |ctx| &ctx.proxy_block)
+    }
+
+    fn node_arena_mut(&self) -> RefMut<Arena<ProxyBlock>> {
+        RefMut::map(self.context.borrow_mut(), |ctx| &mut ctx.proxy_block)
+    }
+}
+
+impl Parent<Symbol> for Node<Module> {
+    fn nodes(&self) -> Ref<Vec<Index>> {
+        Ref::map(self.borrow(), |module| &module.symbols)
+    }
+
+    fn nodes_mut(&self) -> RefMut<Vec<Index>> {
+        RefMut::map(self.borrow_mut(), |module| &mut module.symbols)
+    }
+
+    fn node_arena(&self) -> Ref<Arena<Symbol>> {
+        Ref::map(self.context.borrow(), |ctx| &ctx.symbol)
+    }
+
+    fn node_arena_mut(&self) -> RefMut<Arena<Symbol>> {
+        RefMut::map(self.context.borrow_mut(), |ctx| &mut ctx.symbol)
     }
 }
 

@@ -50,30 +50,56 @@ impl Node<Section> {
     pub fn remove_flag(&self, flag: SectionFlag) {
         self.borrow_mut().flags.remove(&flag);
     }
+
+    pub fn byte_intervals(&self) -> NodeIterator<Section, ByteInterval> {
+        self.node_iter()
+    }
+
+    pub fn add_byte_interval(
+        &self,
+        byte_interval: ByteInterval,
+    ) -> Node<ByteInterval> {
+        self.add_node(byte_interval)
+    }
+
+    pub fn remove_byte_interval(&self, node: Node<ByteInterval>) {
+        self.remove_node(node);
+    }
 }
 
 impl Indexed<Section> for Node<Section> {
-    fn get_ref(
-        &self,
-        (index, _): (Index, PhantomData<Section>),
-    ) -> Option<Ref<Section>> {
-        let context = self.context.borrow();
-        if context.section.contains(index) {
-            Some(Ref::map(context, |ctx| &ctx.section[index]))
-        } else {
-            None
-        }
+    fn arena(&self) -> Ref<Arena<Section>> {
+        Ref::map(self.context.borrow(), |ctx| &ctx.section)
     }
 
-    fn get_ref_mut(
-        &self,
-        (index, _): (Index, PhantomData<Section>),
-    ) -> Option<RefMut<Section>> {
-        let context = self.context.borrow_mut();
-        if context.section.contains(index) {
-            Some(RefMut::map(context, |ctx| &mut ctx.section[index]))
-        } else {
-            None
-        }
+    fn arena_mut(&self) -> RefMut<Arena<Section>> {
+        RefMut::map(self.context.borrow_mut(), |ctx| &mut ctx.section)
+    }
+}
+
+impl Child<Module> for Node<Section> {
+    fn parent(&self) -> (Option<Index>, PhantomData<Module>) {
+        (self.borrow().parent, PhantomData)
+    }
+
+    fn set_parent(&self, (index, _): (Index, PhantomData<Module>)) {
+        self.borrow_mut().parent.replace(index);
+    }
+}
+
+impl Parent<ByteInterval> for Node<Section> {
+    fn nodes(&self) -> Ref<Vec<Index>> {
+        Ref::map(self.borrow(), |section| &section.byte_intervals)
+    }
+
+    fn nodes_mut(&self) -> RefMut<Vec<Index>> {
+        RefMut::map(self.borrow_mut(), |section| &mut section.byte_intervals)
+    }
+
+    fn node_arena(&self) -> Ref<Arena<ByteInterval>> {
+        Ref::map(self.context.borrow(), |ctx| &ctx.byte_interval)
+    }
+    fn node_arena_mut(&self) -> RefMut<Arena<ByteInterval>> {
+        RefMut::map(self.context.borrow_mut(), |ctx| &mut ctx.byte_interval)
     }
 }

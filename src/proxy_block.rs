@@ -29,27 +29,21 @@ impl Unique for ProxyBlock {
 impl Node<ProxyBlock> {}
 
 impl Indexed<ProxyBlock> for Node<ProxyBlock> {
-    fn get_ref(
-        &self,
-        (index, _): (Index, PhantomData<ProxyBlock>),
-    ) -> Option<Ref<ProxyBlock>> {
-        let context = self.context.borrow();
-        if context.proxy_block.contains(index) {
-            Some(Ref::map(context, |ctx| &ctx.proxy_block[index]))
-        } else {
-            None
-        }
+    fn arena(&self) -> Ref<Arena<ProxyBlock>> {
+        Ref::map(self.context.borrow(), |ctx| &ctx.proxy_block)
     }
 
-    fn get_ref_mut(
-        &self,
-        (index, _): (Index, PhantomData<ProxyBlock>),
-    ) -> Option<RefMut<ProxyBlock>> {
-        let context = self.context.borrow_mut();
-        if context.proxy_block.contains(index) {
-            Some(RefMut::map(context, |ctx| &mut ctx.proxy_block[index]))
-        } else {
-            None
-        }
+    fn arena_mut(&self) -> RefMut<Arena<ProxyBlock>> {
+        RefMut::map(self.context.borrow_mut(), |ctx| &mut ctx.proxy_block)
+    }
+}
+
+impl Child<Module> for Node<ProxyBlock> {
+    fn parent(&self) -> (Option<Index>, PhantomData<Module>) {
+        (self.borrow().parent, PhantomData)
+    }
+
+    fn set_parent(&self, (index, _): (Index, PhantomData<Module>)) {
+        self.borrow_mut().parent.replace(index);
     }
 }

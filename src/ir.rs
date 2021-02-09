@@ -167,5 +167,4 @@ mod tests {
         }
         assert!(ir.modules().all(|m| m.preferred_address() == 1));
     }
-
 }
