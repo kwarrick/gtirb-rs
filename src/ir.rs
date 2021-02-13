@@ -74,7 +74,7 @@ impl Node<IR> {
         self.borrow_mut().version = version
     }
 
-    pub fn modules(&self) -> NodeIterator<IR, Module> {
+    pub fn modules(&self) -> NodeIterator<Module> {
         self.node_iter()
     }
 

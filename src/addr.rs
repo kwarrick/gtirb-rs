@@ -1,5 +1,5 @@
-use std::fmt;
 use std::convert::From;
+use std::fmt;
 use std::ops::{Add, Sub};
 
 #[derive(Clone, Copy, Default, PartialEq)]

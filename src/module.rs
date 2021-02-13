@@ -123,7 +123,7 @@ impl Node<Module> {
         self.borrow().rebase_delta != 0
     }
 
-    pub fn sections(&self) -> NodeIterator<Module, Section> {
+    pub fn sections(&self) -> NodeIterator<Section> {
         self.node_iter()
     }
 
@@ -135,7 +135,7 @@ impl Node<Module> {
         self.remove_node(node);
     }
 
-    pub fn proxy_blocks(&self) -> NodeIterator<Module, ProxyBlock> {
+    pub fn proxy_blocks(&self) -> NodeIterator<ProxyBlock> {
         self.node_iter()
     }
 
@@ -147,7 +147,7 @@ impl Node<Module> {
         self.remove_node(node);
     }
 
-    pub fn symbols(&self) -> NodeIterator<Module, Symbol> {
+    pub fn symbols(&self) -> NodeIterator<Symbol> {
         self.node_iter()
     }
 

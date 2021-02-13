@@ -32,7 +32,7 @@ impl Unique for ByteInterval {
 }
 
 impl Node<ByteInterval> {
-    pub fn code_blocks(&self) -> NodeIterator<ByteInterval, CodeBlock> {
+    pub fn code_blocks(&self) -> NodeIterator<CodeBlock> {
         self.node_iter()
     }
 
@@ -44,7 +44,7 @@ impl Node<ByteInterval> {
         self.remove_node(node);
     }
 
-    pub fn data_blocks(&self) -> NodeIterator<ByteInterval, DataBlock> {
+    pub fn data_blocks(&self) -> NodeIterator<DataBlock> {
         self.node_iter()
     }
 

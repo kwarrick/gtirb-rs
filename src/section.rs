@@ -51,7 +51,7 @@ impl Node<Section> {
         self.borrow_mut().flags.remove(&flag);
     }
 
-    pub fn byte_intervals(&self) -> NodeIterator<Section, ByteInterval> {
+    pub fn byte_intervals(&self) -> NodeIterator<ByteInterval> {
         self.node_iter()
     }
 

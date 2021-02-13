@@ -49,10 +49,23 @@ struct Node<T> {
     kind: PhantomData<T>,
 }
 
-struct NodeIterator<T, U> {
-    position: usize,
-    parent: Node<T>,
-    kind: PhantomData<U>,
+struct NodeIterator<T> {
+    iter: Box<dyn Iterator<Item = Index>>,
+    context: Rc<RefCell<Context>>,
+    kind: PhantomData<T>,
+}
+
+impl<T> Iterator for NodeIterator<T> {
+    type Item = Node<T>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let item = self.iter.next();
+        item.map(|index| Node {
+            index,
+            context: self.context.clone(),
+            kind: PhantomData,
+        })
+    }
 }
 
 trait Child<T> {
@@ -68,15 +81,18 @@ trait Parent<T> {
     fn node_arena_mut(&self) -> RefMut<Arena<T>>;
 }
 
-impl<T> Node<T> {
-    pub fn node_iter<U>(&self) -> NodeIterator<T, U> {
+impl<T> Node<T>
+where
+    Node<T>: Indexed<T>,
+{
+    pub fn node_iter<U>(&self) -> NodeIterator<U>
+    where
+        Node<U>: Child<T>,
+        Node<T>: Parent<U>,
+    {
         NodeIterator {
-            position: 0,
-            parent: Node {
-                index: self.index,
-                context: self.context.clone(),
-                kind: PhantomData,
-            },
+            iter: Box::new(self.nodes().clone().into_iter()),
+            context: self.context.clone(),
             kind: PhantomData,
         }
     }
@@ -122,23 +138,6 @@ impl<T> Node<T> {
         // Remove Child from Context.
         self.node_arena_mut().remove(index);
         self.context.borrow_mut().uuid_map.remove(&uuid);
-    }
-}
-
-impl<T, U> Iterator for NodeIterator<T, U>
-where
-    Node<T>: Parent<U>,
-{
-    type Item = Node<U>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let child = self.parent.nodes().get(self.position).cloned();
-        self.position += 1;
-        child.map(|index| Node {
-            index,
-            context: self.parent.context.clone(),
-            kind: PhantomData,
-        })
     }
 }
 
