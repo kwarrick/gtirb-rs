@@ -65,6 +65,32 @@ impl Node<Section> {
     pub fn remove_byte_interval(&self, node: Node<ByteInterval>) {
         self.remove_node(node);
     }
+
+    pub fn code_blocks(&self) -> NodeIterator<CodeBlock> {
+        let iter = self.byte_intervals().flat_map(|interval| {
+            <Node<ByteInterval> as Parent<CodeBlock>>::nodes(&interval)
+                .clone()
+                .into_iter()
+        });
+        NodeIterator {
+            iter: Box::new(iter),
+            context: self.context.clone(),
+            kind: PhantomData,
+        }
+    }
+
+    pub fn data_blocks(&self) -> NodeIterator<DataBlock> {
+        let iter = self.byte_intervals().flat_map(|interval| {
+            <Node<ByteInterval> as Parent<DataBlock>>::nodes(&interval)
+                .clone()
+                .into_iter()
+        });
+        NodeIterator {
+            iter: Box::new(iter),
+            context: self.context.clone(),
+            kind: PhantomData,
+        }
+    }
 }
 
 impl Indexed<Section> for Node<Section> {

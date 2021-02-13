@@ -163,11 +163,50 @@ impl Node<Module> {
     // size
     // address
 
-    // code_blocks()
-    // data_blocks()
-    // byte_intervals()
-    // symbolic_expressions()
+    pub fn byte_intervals(&self) -> NodeIterator<ByteInterval> {
+        let iter = self.sections().flat_map(|interval| {
+            <Node<Section> as Parent<ByteInterval>>::nodes(&interval)
+                .clone()
+                .into_iter()
+        });
+        NodeIterator {
+            iter: Box::new(iter),
+            context: self.context.clone(),
+            kind: PhantomData,
+        }
+    }
 
+    pub fn code_blocks(&self) -> NodeIterator<CodeBlock> {
+        let iter = self.sections().flat_map(|section| {
+            section.byte_intervals().flat_map(|interval| {
+                <Node<ByteInterval> as Parent<CodeBlock>>::nodes(&interval)
+                    .clone()
+                    .into_iter()
+            })
+        });
+        NodeIterator {
+            iter: Box::new(iter),
+            context: self.context.clone(),
+            kind: PhantomData,
+        }
+    }
+
+    pub fn data_blocks(&self) -> NodeIterator<DataBlock> {
+        let iter = self.sections().flat_map(|section| {
+            section.byte_intervals().flat_map(|interval| {
+                <Node<ByteInterval> as Parent<DataBlock>>::nodes(&interval)
+                    .clone()
+                    .into_iter()
+            })
+        });
+        NodeIterator {
+            iter: Box::new(iter),
+            context: self.context.clone(),
+            kind: PhantomData,
+        }
+    }
+
+    // symbolic_expressions()
     // get_symbol_reference<T>(symbol: Symbol) -> Node<T>
 }
 
@@ -309,5 +348,30 @@ mod tests {
         let module = Module::new("dummy");
         let module = ir.add_module(module);
         assert_eq!(module.ir(), ir);
+    }
+
+    #[test]
+    fn can_iterate_over_code_blocks() {
+        let ir = IR::new();
+        let module = ir.add_module(Module::new("dummy"));
+        let section = module.add_section(Section::new(".dummy"));
+        let b1 = section.add_byte_interval(ByteInterval::new());
+        let b2 = section.add_byte_interval(ByteInterval::new());
+        let cb1 = b1.add_code_block(CodeBlock::new());
+        let cb2 = b2.add_code_block(CodeBlock::new());
+        assert_eq!(
+            module
+                .code_blocks()
+                .map(|cb| cb.uuid())
+                .collect::<Vec<Uuid>>(),
+            vec![cb1.uuid(), cb2.uuid()]
+        );
+        assert_eq!(
+            section
+                .code_blocks()
+                .map(|cb| cb.uuid())
+                .collect::<Vec<Uuid>>(),
+            vec![cb1.uuid(), cb2.uuid()]
+        );
     }
 }

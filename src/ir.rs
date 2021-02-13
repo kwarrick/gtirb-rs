@@ -108,6 +108,7 @@ impl Parent<Module> for Node<IR> {
     fn node_arena(&self) -> Ref<Arena<Module>> {
         Ref::map(self.context.borrow(), |ctx| &ctx.module)
     }
+
     fn node_arena_mut(&self) -> RefMut<Arena<Module>> {
         RefMut::map(self.context.borrow_mut(), |ctx| &mut ctx.module)
     }
