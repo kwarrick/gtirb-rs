@@ -36,7 +36,7 @@ impl Unique for ByteInterval {
 
 impl Node<ByteInterval> {
     pub fn size(&self) -> u64 {
-        return self.borrow().size
+        return self.borrow().size;
     }
 
     pub fn set_size(&self, n: u64) {
@@ -44,7 +44,7 @@ impl Node<ByteInterval> {
     }
 
     pub fn address(&self) -> Option<Addr> {
-        return self.borrow().address
+        return self.borrow().address;
     }
 
     pub fn set_address(&self, address: Option<Addr>) {
@@ -63,7 +63,7 @@ impl Node<ByteInterval> {
     }
 
     pub fn bytes(&self) -> Ref<[u8]> {
-        Ref::map(self.borrow(), |i| &i.bytes[..] )
+        Ref::map(self.borrow(), |i| &i.bytes[..])
     }
 
     pub fn set_bytes<T: AsRef<[u8]>>(&self, bytes: T) {

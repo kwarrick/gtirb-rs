@@ -47,10 +47,6 @@ impl Node<Module> {
         }
     }
 
-    pub fn set_ir(&self, ir: Node<IR>) {
-        self.borrow_mut().parent.replace(ir.index);
-    }
-
     pub fn name(&self) -> String {
         self.borrow().name.to_owned()
     }
@@ -346,6 +342,14 @@ mod tests {
     }
 
     #[test]
+    fn can_set_name() {
+        let ir = IR::new();
+        let module = ir.add_module(Module::new("dummy"));
+        module.set_name("example");
+        assert_eq!(module.name(), "example");
+    }
+
+    #[test]
     fn can_relocate_module() {
         let ir = IR::new();
         let module = ir.add_module(Module::new("dummy"));
@@ -363,6 +367,15 @@ mod tests {
         let module = Module::new("dummy");
         let module = ir.add_module(module);
         assert_eq!(module.ir(), ir);
+    }
+
+    #[test]
+    fn can_remove_section() {
+        let ir = IR::new();
+        let module = ir.add_module(Module::new("foo"));
+        let section = module.add_section(Section::new("bar"));
+        module.remove_section(section);
+        assert_eq!(module.sections().count(), 0);
     }
 
     #[test]
@@ -415,5 +428,7 @@ mod tests {
         bytes.set_size(100);
         assert_eq!(module.size(), Some(400));
         assert_eq!(module.address(), Some(Addr(0)));
+
+        assert_eq!(module.byte_intervals().count(), 2);
     }
 }

@@ -11,6 +11,7 @@ pub(crate) struct Symbol {
     pub(crate) parent: Option<Index>,
 
     uuid: Uuid,
+    name: String,
     payload: Option<Payload>,
 }
 
@@ -18,6 +19,7 @@ impl Symbol {
     pub fn new(name: &str) -> Self {
         Symbol {
             uuid: Uuid::new_v4(),
+            name: name.to_owned(),
             ..Default::default()
         }
     }
