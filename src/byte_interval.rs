@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crate::*;
 
 #[derive(Default, Debug, PartialEq)]
-pub(crate) struct ByteInterval {
+pub struct ByteInterval {
     pub(crate) parent: Option<Index>,
 
     uuid: Uuid,

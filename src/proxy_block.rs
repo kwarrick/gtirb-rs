@@ -1,7 +1,7 @@
 use crate::*;
 
 #[derive(Default, Debug, PartialEq)]
-pub(crate) struct ProxyBlock {
+pub struct ProxyBlock {
     pub(crate) parent: Option<Index>,
 
     uuid: Uuid,

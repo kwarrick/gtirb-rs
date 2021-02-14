@@ -1,13 +1,15 @@
+use anyhow::{anyhow, Result};
+
 use crate::*;
 
 #[derive(Debug, Default, PartialEq)]
-pub(crate) struct Module {
+pub struct Module {
     pub(crate) parent: Option<Index>,
 
     uuid: Uuid,
     name: String,
     binary_path: String,
-    entry_point: Option<Index>,
+    entry_point: Option<Uuid>,
     byte_order: ByteOrder,
     isa: ISA,
     rebase_delta: i64,
@@ -25,6 +27,38 @@ impl Module {
             name: name.to_owned(),
             ..Default::default()
         }
+    }
+
+    pub(crate) fn load_protobuf(
+        context: Rc<RefCell<Context>>,
+        message: proto::Module,
+    ) -> Result<Index> {
+        let format = FileFormat::from_i32(message.file_format)
+            .ok_or(anyhow!("Invalid FileFormat"))?;
+
+        let isa = ISA::from_i32(message.isa).ok_or(anyhow!("Invalid ISA"))?;
+
+        let byte_order = ByteOrder::from_i32(message.byte_order)
+            .ok_or(anyhow!("Invalid ByteOrder"))?;
+
+        let module = Module {
+            parent: None,
+
+            uuid: crate::util::parse_uuid(&message.uuid)?,
+            name: message.name,
+            binary_path: message.binary_path,
+            entry_point: Some(crate::util::parse_uuid(&message.entry_point)?),
+            byte_order: byte_order,
+            isa: isa,
+            rebase_delta: message.rebase_delta,
+            preferred_address: Addr(message.preferred_addr),
+            file_format: format,
+            sections: Vec::new(),     // TODO
+            symbols: Vec::new(),      // TODO
+            proxy_blocks: Vec::new(), // TODO
+        };
+
+        Ok(context.borrow_mut().module.insert(module))
     }
 }
 
@@ -80,15 +114,13 @@ impl Node<Module> {
     }
 
     pub fn entry_point(&self) -> Option<Node<CodeBlock>> {
-        self.borrow().entry_point.map(|index| Node {
-            index,
-            context: self.context.clone(),
-            kind: PhantomData,
-        })
+        self.borrow()
+            .entry_point
+            .and_then(|uuid| self.ir().find_node(uuid))
     }
 
     pub fn set_entry_point(&self, block: Node<CodeBlock>) {
-        self.borrow_mut().entry_point.replace(block.index);
+        self.borrow_mut().entry_point.replace(block.uuid());
     }
 
     pub fn byte_order(&self) -> ByteOrder {
@@ -160,7 +192,11 @@ impl Node<Module> {
             self.sections().map(|i| i.address()).min().flatten();
         let max: Option<Addr> = self
             .sections()
-            .map(|i| i.address().zip(i.size()).map(|(addr,size)| addr + size.into()))
+            .map(|i| {
+                i.address()
+                    .zip(i.size())
+                    .map(|(addr, size)| addr + size.into())
+            })
             .max()
             .flatten();
         if let (Some(min), Some(max)) = (min, max) {

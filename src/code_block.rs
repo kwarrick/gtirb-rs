@@ -1,7 +1,7 @@
 use crate::*;
 
 #[derive(Default, Debug, PartialEq)]
-pub(crate) struct CodeBlock {
+pub struct CodeBlock {
     pub(crate) parent: Option<Index>,
 
     uuid: Uuid,

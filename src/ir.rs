@@ -6,7 +6,7 @@ use prost::Message;
 use crate::*;
 
 #[derive(Debug, Default, PartialEq)]
-pub(crate) struct IR {
+pub struct IR {
     uuid: Uuid,
     version: u32,
     modules: Vec<Index>,
@@ -43,12 +43,34 @@ impl IR {
     }
 
     fn load_protobuf(message: proto::Ir) -> Result<Node<IR>> {
-        Ok(IR::new())
+        let context = Rc::new(RefCell::new(Context::new()));
+
+        let ir = IR {
+            uuid: crate::util::parse_uuid(&message.uuid)?,
+            version: message.version,
+            modules: message
+                .modules
+                .into_iter()
+                .map(|m| Module::load_protobuf(context.clone(), m))
+                .collect::<Result<Vec<Index>>>()?,
+        };
+
+        let index = context.borrow_mut().ir.insert(ir);
+
+        for (_, module) in context.borrow_mut().module.iter_mut() {
+            module.parent.replace(index);
+        }
+
+        Ok(Node {
+            index: index,
+            context: context,
+            kind: PhantomData,
+        })
     }
 }
 
 impl Node<IR> {
-    fn find_node<U>(&self, uuid: Uuid) -> Option<Node<U>>
+    pub fn find_node<U>(&self, uuid: Uuid) -> Option<Node<U>>
     where
         Node<U>: Indexed<U>,
         U: Unique,
@@ -112,6 +134,11 @@ impl Parent<Module> for Node<IR> {
     fn node_arena_mut(&self) -> RefMut<Arena<Module>> {
         RefMut::map(self.context.borrow_mut(), |ctx| &mut ctx.module)
     }
+}
+
+pub fn read<P: AsRef<Path>>(path: P) -> Result<Node<IR>> {
+    let bytes = std::fs::read(path)?;
+    IR::load_protobuf(proto::Ir::decode(&*bytes)?)
 }
 
 #[cfg(test)]

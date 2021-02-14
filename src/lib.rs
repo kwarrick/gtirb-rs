@@ -18,40 +18,43 @@ mod addr;
 use addr::*;
 
 mod ir;
-use ir::*;
+pub use ir::read;
+use ir::IR;
 
 mod module;
-use module::*;
+use module::Module;
 
 mod section;
-use section::*;
+use section::Section;
 
 mod byte_interval;
-use byte_interval::*;
+use byte_interval::ByteInterval;
 
 mod code_block;
-use code_block::*;
+use code_block::CodeBlock;
 
 mod data_block;
-use data_block::*;
+use data_block::DataBlock;
 
 mod proxy_block;
-use proxy_block::*;
+use proxy_block::ProxyBlock;
 
 mod symbol;
-use symbol::*;
+use symbol::Symbol;
 
 mod symbolic_expression;
-use symbolic_expression::*;
+use symbolic_expression::SymbolicExpression;
+
+mod util;
 
 #[derive(Clone, Debug)]
-struct Node<T> {
+pub struct Node<T> {
     index: Index,
     context: Rc<RefCell<Context>>,
     kind: PhantomData<T>,
 }
 
-struct NodeIterator<T> {
+pub struct NodeIterator<T> {
     iter: Box<dyn Iterator<Item = Index>>,
     context: Rc<RefCell<Context>>,
     kind: PhantomData<T>,
@@ -70,12 +73,12 @@ impl<T> Iterator for NodeIterator<T> {
     }
 }
 
-trait Child<T> {
+pub trait Child<T> {
     fn parent(&self) -> (Option<Index>, PhantomData<T>);
     fn set_parent(&self, index: (Index, PhantomData<T>));
 }
 
-trait Parent<T> {
+pub trait Parent<T> {
     fn nodes(&self) -> Ref<Vec<Index>>;
     fn nodes_mut(&self) -> RefMut<Vec<Index>>;
 
@@ -143,7 +146,7 @@ where
     }
 }
 
-trait Indexed<T> {
+pub trait Indexed<T> {
     fn arena(&self) -> Ref<Arena<T>>;
     fn arena_mut(&self) -> RefMut<Arena<T>>;
 }
@@ -163,7 +166,7 @@ where
     }
 }
 
-trait Unique {
+pub trait Unique {
     fn uuid(&self) -> Uuid;
     fn set_uuid(&mut self, uuid: Uuid);
 }

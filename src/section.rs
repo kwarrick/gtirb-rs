@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use crate::*;
 
 #[derive(Default, Debug, PartialEq)]
-pub(crate) struct Section {
+pub struct Section {
     pub(crate) parent: Option<Index>,
 
     uuid: Uuid,

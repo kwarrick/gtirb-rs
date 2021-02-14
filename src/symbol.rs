@@ -1,13 +1,13 @@
 use crate::*;
 
 #[derive(Debug, PartialEq)]
-pub(crate) enum Payload {
+pub enum Payload {
     Value(Addr),
     Referent(Uuid),
 }
 
 #[derive(Debug, Default, PartialEq)]
-pub(crate) struct Symbol {
+pub struct Symbol {
     pub(crate) parent: Option<Index>,
 
     uuid: Uuid,
