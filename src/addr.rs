@@ -2,7 +2,7 @@ use std::convert::From;
 use std::fmt;
 use std::ops::{Add, Sub};
 
-#[derive(Clone, Copy, Default, PartialEq)]
+#[derive(Clone, Copy, Default, Eq, Ord, PartialOrd, PartialEq)]
 pub struct Addr(pub u64);
 
 impl Add for Addr {
@@ -33,6 +33,12 @@ impl From<u64> for Addr {
     }
 }
 
+impl From<Addr> for u64 {
+    fn from(a: Addr) -> Self {
+        a.0
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::Addr;
@@ -45,5 +51,16 @@ mod tests {
     #[test]
     fn subtracts() {
         assert_eq!(Addr(0x2000) - Addr(0x1000), Addr(0x1000));
+    }
+
+    #[test]
+    fn equality() {
+        assert!(Addr(0xCAFE) == Addr(0xCAFE));
+    }
+
+    #[test]
+    fn compares() {
+        assert!(Addr(0xCAFE) < Addr(0xCAFF));
+        assert!(Addr(0xCAFE) > Addr(0xBEEF));
     }
 }

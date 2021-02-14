@@ -7,6 +7,9 @@ pub(crate) struct ByteInterval {
     pub(crate) parent: Option<Index>,
 
     uuid: Uuid,
+    size: u64,
+    address: Option<Addr>,
+    bytes: Vec<u8>,
     code_blocks: Vec<Index>,
     data_blocks: Vec<Index>,
     symbolic_expressions: HashMap<u64, SymbolicExpression>,
@@ -32,6 +35,41 @@ impl Unique for ByteInterval {
 }
 
 impl Node<ByteInterval> {
+    pub fn size(&self) -> u64 {
+        return self.borrow().size
+    }
+
+    pub fn set_size(&self, n: u64) {
+        self.borrow_mut().size = n;
+    }
+
+    pub fn address(&self) -> Option<Addr> {
+        return self.borrow().address
+    }
+
+    pub fn set_address(&self, address: Option<Addr>) {
+        self.borrow_mut().address = address;
+    }
+
+    pub fn initialized_size(&self) -> u64 {
+        self.borrow().bytes.len() as u64
+    }
+
+    pub fn set_initialized_size(&self, n: u64) {
+        self.borrow_mut().bytes.resize(n as usize, 0);
+        if n > self.size() {
+            self.set_size(n);
+        }
+    }
+
+    pub fn bytes(&self) -> Ref<[u8]> {
+        Ref::map(self.borrow(), |i| &i.bytes[..] )
+    }
+
+    pub fn set_bytes<T: AsRef<[u8]>>(&self, bytes: T) {
+        self.borrow_mut().bytes = bytes.as_ref().to_vec();
+    }
+
     pub fn code_blocks(&self) -> NodeIterator<CodeBlock> {
         self.node_iter()
     }
@@ -110,5 +148,22 @@ impl Parent<DataBlock> for Node<ByteInterval> {
 
     fn node_arena_mut(&self) -> RefMut<Arena<DataBlock>> {
         RefMut::map(self.context.borrow_mut(), |ctx| &mut ctx.data_block)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn can_set_attributes() {
+        let ir = IR::new();
+        let module = ir.add_module(Module::new("dummy"));
+        let section = module.add_section(Section::new(".dummy"));
+        let interval = section.add_byte_interval(ByteInterval::new());
+        interval.set_size(0xDEAD);
+        interval.set_address(Some(Addr(0xBEEF)));
+        assert_eq!(interval.size(), 0xDEAD);
+        assert_eq!(interval.address(), Some(Addr(0xBEEF)));
     }
 }

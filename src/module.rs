@@ -159,9 +159,24 @@ impl Node<Module> {
         self.remove_node(node);
     }
 
-    // TODO:
-    // size
-    // address
+    pub fn size(&self) -> Option<u64> {
+        let min: Option<Addr> =
+            self.sections().map(|i| i.address()).min().flatten();
+        let max: Option<Addr> = self
+            .sections()
+            .map(|i| i.address().zip(i.size()).map(|(addr,size)| addr + size.into()))
+            .max()
+            .flatten();
+        if let (Some(min), Some(max)) = (min, max) {
+            Some(u64::from(max - min))
+        } else {
+            None
+        }
+    }
+
+    pub fn address(&self) -> Option<Addr> {
+        self.sections().map(|s| s.address()).min().flatten()
+    }
 
     pub fn byte_intervals(&self) -> NodeIterator<ByteInterval> {
         let iter = self.sections().flat_map(|interval| {
@@ -373,5 +388,32 @@ mod tests {
                 .collect::<Vec<Uuid>>(),
             vec![cb1.uuid(), cb2.uuid()]
         );
+    }
+
+    #[test]
+    fn can_calculate_size() {
+        let ir = IR::new();
+        let module = ir.add_module(Module::new("dummy"));
+        assert_eq!(module.size(), None);
+        assert_eq!(module.address(), None);
+
+        let text = module.add_section(Section::new(".text"));
+        let bytes = text.add_byte_interval(ByteInterval::new());
+        bytes.set_address(Some(Addr(200)));
+        bytes.set_size(100);
+
+        assert!(module.address().is_some());
+        assert_eq!(module.size(), Some(100));
+        assert_eq!(module.address(), Some(Addr(200)));
+
+        bytes.set_address(Some(Addr(0)));
+        assert_eq!(module.address(), Some(Addr(0)));
+
+        let data = module.add_section(Section::new(".data"));
+        let bytes = data.add_byte_interval(ByteInterval::new());
+        bytes.set_address(Some(Addr(300)));
+        bytes.set_size(100);
+        assert_eq!(module.size(), Some(400));
+        assert_eq!(module.address(), Some(Addr(0)));
     }
 }
