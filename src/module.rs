@@ -41,6 +41,24 @@ impl Module {
         let byte_order = ByteOrder::from_i32(message.byte_order)
             .ok_or(anyhow!("Invalid ByteOrder"))?;
 
+        let sections = message
+            .sections
+            .into_iter()
+            .map(|m| Section::load_protobuf(context.clone(), m))
+            .collect::<Result<Vec<Index>>>()?;
+
+        let symbols = message
+            .symbols
+            .into_iter()
+            .map(|m| Symbol::load_protobuf(context.clone(), m))
+            .collect::<Result<Vec<Index>>>()?;
+
+        let proxy_blocks = message
+            .proxies
+            .into_iter()
+            .map(|m| ProxyBlock::load_protobuf(context.clone(), m))
+            .collect::<Result<Vec<Index>>>()?;
+
         let module = Module {
             parent: None,
 
@@ -53,9 +71,9 @@ impl Module {
             rebase_delta: message.rebase_delta,
             preferred_address: Addr(message.preferred_addr),
             file_format: format,
-            sections: Vec::new(),     // TODO
-            symbols: Vec::new(),      // TODO
-            proxy_blocks: Vec::new(), // TODO
+            sections: sections,
+            symbols: symbols,
+            proxy_blocks: proxy_blocks,
         };
 
         Ok(context.borrow_mut().module.insert(module))

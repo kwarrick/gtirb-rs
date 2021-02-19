@@ -1,3 +1,5 @@
+use anyhow::Result;
+
 use crate::*;
 
 #[derive(Default, Debug, PartialEq)]
@@ -13,6 +15,16 @@ impl ProxyBlock {
             uuid: Uuid::new_v4(),
             ..Default::default()
         }
+    }
+    pub(crate) fn load_protobuf(
+        context: Rc<RefCell<Context>>,
+        message: proto::ProxyBlock,
+    ) -> Result<Index> {
+        let proxy_block = ProxyBlock {
+            parent: None,
+            uuid: crate::util::parse_uuid(&message.uuid)?,
+        };
+        Ok(context.borrow_mut().proxy_block.insert(proxy_block))
     }
 }
 

@@ -1,3 +1,5 @@
+use anyhow::Result;
+
 use std::collections::HashMap;
 
 use crate::*;
@@ -21,6 +23,38 @@ impl ByteInterval {
             uuid: Uuid::new_v4(),
             ..Default::default()
         }
+    }
+
+    pub(crate) fn load_protobuf(
+        context: Rc<RefCell<Context>>,
+        message: proto::ByteInterval,
+    ) -> Result<Index> {
+
+        // let code_blocks = message
+        //     .code_blocks
+        //     .into_iter()
+        //     .map(|m| CodeBlock::load_protobuf(context.clone(), m))
+        //     .collect::<Result<Vec<Index>>>()?;
+
+        // let data_blocks = message
+        //     .data_blocks
+        //     .into_iter()
+        //     .map(|m| CodeBlock::load_protobuf(context.clone(), m))
+        //     .collect::<Result<Vec<Index>>>()?;
+
+        let byte_interval = ByteInterval {
+            parent: None,
+
+            uuid: crate::util::parse_uuid(&message.uuid)?,
+            size: message.size,
+            address: message.has_address.then(|| Addr(message.address)),
+            bytes: message.contents,
+            code_blocks: Vec::new(), // TODO
+            data_blocks: Vec::new(), // TODO
+            symbolic_expressions: HashMap::new(), // TODO
+        };
+
+        Ok(context.borrow_mut().byte_interval.insert(byte_interval))
     }
 }
 

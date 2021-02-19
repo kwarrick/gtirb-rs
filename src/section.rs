@@ -1,5 +1,7 @@
 use std::collections::HashSet;
 
+use anyhow::{anyhow, Result};
+
 use crate::*;
 
 #[derive(Default, Debug, PartialEq)]
@@ -19,6 +21,37 @@ impl Section {
             name: name.to_owned(),
             ..Default::default()
         }
+    }
+
+    pub(crate) fn load_protobuf(
+        context: Rc<RefCell<Context>>,
+        message: proto::Section,
+    ) -> Result<Index> {
+
+        let section_flags: Result<HashSet<SectionFlag>> = message
+            .section_flags
+            .into_iter()
+            .map(|i| {
+                SectionFlag::from_i32(i).ok_or(anyhow!("Invalid FileFormat"))
+            })
+            .collect();
+
+        let byte_intervals = message
+            .byte_intervals
+            .into_iter()
+            .map(|m| ByteInterval::load_protobuf(context.clone(), m))
+            .collect::<Result<Vec<Index>>>()?;
+
+        let section = Section {
+            parent: None,
+
+            uuid: crate::util::parse_uuid(&message.uuid)?,
+            name: message.name,
+            flags: section_flags?,
+            byte_intervals: byte_intervals,
+        };
+
+        Ok(context.borrow_mut().section.insert(section))
     }
 }
 

@@ -1,3 +1,5 @@
+use anyhow::Result;
+
 use crate::*;
 
 #[derive(Debug, PartialEq)]
@@ -22,6 +24,31 @@ impl Symbol {
             name: name.to_owned(),
             ..Default::default()
         }
+    }
+
+    pub(crate) fn load_protobuf(
+        context: Rc<RefCell<Context>>,
+        message: proto::Symbol,
+    ) -> Result<Index> {
+        use crate::proto::symbol::OptionalPayload;
+
+        let payload = match message.optional_payload {
+            Some(OptionalPayload::Value(n)) => Some(Payload::Value(Addr(n))),
+            Some(OptionalPayload::ReferentUuid(bytes)) => {
+                Some(Payload::Referent(crate::util::parse_uuid(&bytes)?))
+            }
+            None => None,
+        };
+
+        let symbol = Symbol {
+            parent: None,
+
+            uuid: crate::util::parse_uuid(&message.uuid)?,
+            name: message.name,
+            payload: payload,
+        };
+
+        Ok(context.borrow_mut().symbol.insert(symbol))
     }
 }
 
