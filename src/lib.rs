@@ -4,7 +4,7 @@ struct CodeBlock {
 
 impl CodeBlock {
     fn address(&self, bytes: &ByteInterval) -> Option<u64> {
-        bytes.address.map(|address| address + self.offset)
+        bytes.address().map(|address| address + self.offset)
     }
 }
 
@@ -14,6 +14,10 @@ struct ByteInterval {
 }
 
 impl ByteInterval {
+    fn address(&self) -> Option<u64> {
+        self.address
+    }
+
     fn code_blocks(&self) -> impl Iterator<Item = &CodeBlock> {
         self.code_blocks.iter()
     }
@@ -93,6 +97,15 @@ mod tests {
                 }],
             }],
         };
+
+
+        let module = ir.modules().nth(0).unwrap();
+        let address = module
+            .byte_intervals()
+            .flat_map(|bi| bi.address())
+            .nth(0)
+            .unwrap();
+        assert_eq!(address, 0xCAFE);
 
         for module in ir.modules() {
             println!("module: {}", module.name);
