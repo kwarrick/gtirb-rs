@@ -5,11 +5,11 @@ use prost::Message;
 
 use crate::*;
 
-#[derive(Debug, Default, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct IR {
     uuid: Uuid,
     version: u32,
-    modules: Vec<Index>,
+    modules: Vec<Node<Module>>,
 }
 
 impl Unique for IR {
@@ -24,17 +24,11 @@ impl Unique for IR {
 
 impl IR {
     pub fn new() -> Node<IR> {
-        let mut context = Context::new();
-        let index = context.ir.insert(IR {
+        Box::pin(IR {
             uuid: Uuid::new_v4(),
-            modules: Vec::new(),
+            modules: Vec::with_capacity(1),
             version: 1,
-        });
-        Node {
-            index,
-            context: Rc::new(RefCell::new(context)),
-            kind: PhantomData,
-        }
+        })
     }
 
     pub fn read<P: AsRef<Path>>(path: P) -> Result<Node<IR>> {
@@ -43,96 +37,50 @@ impl IR {
     }
 
     fn load_protobuf(message: proto::Ir) -> Result<Node<IR>> {
-        let context = Rc::new(RefCell::new(Context::new()));
-
-        let ir = IR {
+        // Load IR protobuf message.
+        let mut ir = IR {
             uuid: crate::util::parse_uuid(&message.uuid)?,
             version: message.version,
-            modules: message
-                .modules
-                .into_iter()
-                .map(|m| Module::load_protobuf(context.clone(), m))
-                .collect::<Result<Vec<Index>>>()?,
+            modules: Vec::with_capacity(message.modules.len()),
         };
 
-        let index = context.borrow_mut().ir.insert(ir);
-
-        for (_, module) in context.borrow_mut().module.iter_mut() {
-            module.parent.replace(index);
+        // Load Module protobuf messages.
+        for m in message.modules.into_iter() {
+            ir.add_module(Module::load_protobuf(m)?);
         }
 
-        Ok(Node {
-            index: index,
-            context: context,
-            kind: PhantomData,
-        })
-    }
-}
-
-impl Node<IR> {
-    pub fn find_node<U>(&self, uuid: Uuid) -> Option<Node<U>>
-    where
-        Node<U>: Indexed<U>,
-        U: Unique,
-    {
-        self.context
-            .borrow()
-            .uuid_map
-            .get(&uuid)
-            .map(|index| Node {
-                index: *index,
-                context: self.context.clone(),
-                kind: PhantomData,
-            })
-            .filter(|node| node.arena().contains(node.index))
-            .filter(|node| node.borrow().uuid() == uuid)
+        Ok(Box::pin(ir))
     }
 
     pub fn version(&self) -> u32 {
-        self.borrow().version
+        self.version
     }
 
-    pub fn set_version(&self, version: u32) {
-        self.borrow_mut().version = version
+    pub fn set_version(&mut self, version: u32) {
+        self.version = version
     }
 
-    pub fn modules(&self) -> NodeIterator<Module> {
-        self.node_iter()
+    pub fn modules(&self) -> Iter<Module> {
+        self.modules.iter()
     }
 
-    pub fn add_module(&self, module: Module) -> Node<Module> {
-        self.add_node(module)
+    pub fn modules_mut(&mut self) -> IterMut<Module> {
+        self.modules.iter_mut()
     }
 
-    pub fn remove_module(&self, node: Node<Module>) {
-        self.remove_node(node);
-    }
-}
-
-impl Indexed<IR> for Node<IR> {
-    fn arena(&self) -> Ref<Arena<IR>> {
-        Ref::map(self.context.borrow(), |ctx| &ctx.ir)
-    }
-    fn arena_mut(&self) -> RefMut<Arena<IR>> {
-        RefMut::map(self.context.borrow_mut(), |ctx| &mut ctx.ir)
-    }
-}
-
-impl Parent<Module> for Node<IR> {
-    fn nodes(&self) -> Ref<Vec<Index>> {
-        Ref::map(self.borrow(), |ir| &ir.modules)
+    pub fn add_module(&mut self, mut module: Module) {
+        module.parent = self;
+        self.modules.push(Box::pin(module));
     }
 
-    fn nodes_mut(&self) -> RefMut<Vec<Index>> {
-        RefMut::map(self.borrow_mut(), |ir| &mut ir.modules)
+    pub fn remove_module(&mut self, uuid: Uuid) {
+        if let Some(pos) = self.modules.iter().position(|m| m.uuid() == uuid) {
+            self.modules.remove(pos);
+        }
     }
 
-    fn node_arena(&self) -> Ref<Arena<Module>> {
-        Ref::map(self.context.borrow(), |ctx| &ctx.module)
-    }
-
-    fn node_arena_mut(&self) -> RefMut<Arena<Module>> {
-        RefMut::map(self.context.borrow_mut(), |ctx| &mut ctx.module)
+    pub fn find_node<T: Unique>(&self, _uuid: Uuid) -> Option<Node<T>> {
+        unimplemented!();
     }
 }
 
@@ -144,6 +92,12 @@ pub fn read<P: AsRef<Path>>(path: P) -> Result<Node<IR>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn is_pinned() {
+        let mut ir = IR::new();
+        ir.add_module(Module::new("A"));
+    }
 
     #[test]
     fn can_create_new_ir() {
@@ -159,52 +113,54 @@ mod tests {
 
     #[test]
     fn can_set_version() {
-        let ir = IR::new();
+        let mut ir = IR::new();
         ir.set_version(42);
         assert_eq!(ir.version(), 42);
     }
 
     #[test]
     fn can_add_new_module() {
-        let ir = IR::new();
+        let mut ir = IR::new();
         let module = Module::new("dummy");
         ir.add_module(module);
         let module = ir.modules().nth(0);
         assert!(module.is_some());
-        assert_eq!(module.unwrap().ir(), ir);
+        assert_eq!(module.unwrap().ir(), Some(&*ir));
     }
 
     #[test]
     fn can_remove_module() {
-        let ir = IR::new();
+        let mut ir = IR::new();
         let module = Module::new("dummy");
-        let module = ir.add_module(module);
-        let uuid = module.uuid();
+        ir.add_module(module);
 
-        ir.remove_module(module);
+        let uuid = ir.modules().last().unwrap().uuid();
+        ir.remove_module(uuid);
         assert_eq!(ir.modules().count(), 0);
 
-        let node: Option<Node<Module>> = ir.find_node(uuid);
-        assert!(node.is_none());
+        // TODO:
+        // let node: Option<Node<Module>> = ir.find_node(uuid);
+        // assert!(node.is_none());
     }
 
-    #[test]
-    fn can_find_node_by_uuid() {
-        let ir = IR::new();
-        let module = Module::new("dummy");
-        let uuid = module.uuid();
-        ir.add_module(module);
-        let node: Option<Node<Module>> = ir.find_node(uuid);
-        assert!(node.is_some());
-        assert_eq!(uuid, node.unwrap().uuid());
-    }
+    // TODO:
+    // #[test]
+    // fn can_find_node_by_uuid() {
+    //     let mut ir = IR::new();
+    //     let module = Module::new("dummy");
+    //     let uuid = module.uuid();
+    //     ir.add_module(module);
+    //     let node: Option<Node<Module>> = ir.find_node(uuid);
+    //     assert!(node.is_some());
+    //     assert_eq!(uuid, node.unwrap().uuid());
+    // }
 
     #[test]
     fn can_modify_modules() {
-        let ir = IR::new();
+        let mut ir = IR::new();
         ir.add_module(Module::new("foo"));
         ir.add_module(Module::new("bar"));
-        for module in ir.modules() {
+        for module in ir.modules_mut() {
             module.set_preferred_address(Addr(1));
         }
         assert!(ir.modules().all(|m| m.preferred_address() == 1.into()));
