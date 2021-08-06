@@ -10,12 +10,12 @@ struct Opt {
 }
 
 pub fn main() -> Result<()> {
-    let opt = Opt::from_args();
-    for file in opt.files {
-        let ir = gtirb::read(file)?;
-        for module in ir.modules() {
-            eprintln!("{:#?}", module);
-        }
-    }
+    // let opt = Opt::from_args();
+    // for file in opt.files {
+    //     let ir = gtirb::read(file)?;
+    //     for module in ir.modules() {
+    //         eprintln!("{:#?}", module);
+    //     }
+    // }
     Ok(())
 }

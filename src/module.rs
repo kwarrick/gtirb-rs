@@ -19,18 +19,8 @@ pub struct Module {
     pub(crate) parent: *mut IR,
 }
 
-impl Unique for Module {
-    fn uuid(&self) -> Uuid {
-        self.uuid
-    }
-
-    fn set_uuid(&mut self, uuid: Uuid) {
-        self.uuid = uuid;
-    }
-}
-
 impl Module {
-    pub fn new(name: &str) -> Self {
+    pub fn new(name: &str) -> Module {
         Module {
             uuid: Uuid::new_v4(),
             name: name.to_owned(),
@@ -45,7 +35,7 @@ impl Module {
         }
     }
 
-    pub(crate) fn load_protobuf(message: proto::Module) -> Result<Module> {
+    pub fn load_protobuf(message: proto::Module) -> Result<Box<Module>> {
         let format = FileFormat::from_i32(message.file_format)
             .ok_or(anyhow!("Invalid FileFormat"))?;
 
@@ -72,7 +62,7 @@ impl Module {
         //     .map(|m| ProxyBlock::load_protobuf(context.clone(), m))
         //     .collect::<Result<Vec<Index>>>()?;
 
-        let module = Module {
+        let module = Box::new(Module {
             uuid: crate::util::parse_uuid(&message.uuid)?,
             name: message.name,
             binary_path: message.binary_path,
@@ -86,33 +76,67 @@ impl Module {
             // symbols: symbols,
             // proxy_blocks: proxy_blocks,
             parent: std::ptr::null_mut(),
-        };
+        });
 
         Ok(module)
     }
 
-    pub fn ir(&self) -> Option<&IR> {
+    pub fn uuid(&self) -> Uuid {
+        self.uuid
+    }
+
+    pub fn set_uuid(&mut self, uuid: Uuid) {
+        self.uuid = uuid;
+    }
+
+    pub fn ir(&self) -> Option<NodeRef<IR, Self>> {
         if self.parent.is_null() {
             None
         } else {
-            unsafe { Some(&*self.parent) }
+            Some(NodeRef {
+                ptr: self.parent,
+                kind: PhantomData,
+                lender: &self,
+            })
         }
     }
 
-    pub fn name(&self) -> String {
-        self.name.to_owned()
+    // fn ir_mut(&mut self) -> Option<NodeMut<IR>> {
+    //     if self.parent.is_null() {
+    //         None
+    //     } else {
+    //         Some(NodeMut {
+    //             ptr: self.parent,
+    //             kind: PhantomData,
+    //         })
+    //     }
+    // }
+
+    // pub fn into_ir(self) -> Option<NodeMut<IR>> {
+    //     if self.parent.is_null() {
+    //         None
+    //     } else {
+    //         Some(NodeMut {
+    //             ptr: self.parent,
+    //             kind: PhantomData,
+    //         })
+    //     }
+    // }
+
+    pub fn name(&self) -> &str {
+        &self.name
     }
 
     pub fn set_name<T: AsRef<str>>(&mut self, name: T) {
         self.name = name.as_ref().to_owned();
     }
 
-    pub fn binary_path(&self) -> String {
-        self.binary_path.to_owned()
+    pub fn binary_path(&self) -> &str {
+        &self.binary_path
     }
 
-    pub fn set_binary_path<T: AsRef<str>>(&mut self, binary_path: T) {
-        self.binary_path = binary_path.as_ref().to_owned();
+    pub fn set_binary_path<T: AsRef<str>>(&mut self, path: T) {
+        self.binary_path = path.as_ref().to_owned();
     }
 
     pub fn file_format(&self) -> FileFormat {
@@ -153,8 +177,8 @@ impl Module {
         self.preferred_address
     }
 
-    pub fn set_preferred_address(&mut self, preferred_address: Addr) {
-        self.preferred_address = preferred_address;
+    pub fn set_preferred_address(&mut self, address: Addr) {
+        self.preferred_address = address;
     }
 
     pub fn rebase_delta(&self) -> i64 {
