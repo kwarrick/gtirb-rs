@@ -2,45 +2,45 @@ use crate::*;
 use std::collections::HashMap;
 
 #[derive(Debug, Default, PartialEq)]
-struct Index {
-    modules: HashMap<Uuid, *mut Module>,
-}
-
-#[derive(Debug, Default, PartialEq)]
 pub struct IR {
     uuid: Uuid,
     version: u32,
-    modules: Vec<*mut Module>,
-    index: Index,
+    modules: HashMap<Uuid, Node<Module>>,
 }
 
 impl IR {
-    pub(crate) fn new() -> IR {
-        IR {
+    pub(crate) fn new() -> Node<IR> {
+        let node = Box::new(IR {
             uuid: Uuid::new_v4(),
             version: 1,
             ..Default::default()
+        });
+        Node {
+            ptr: Box::into_raw(node),
+            kind: PhantomData,
         }
     }
 
-    pub fn load_protobuf(message: proto::Ir) -> Result<Box<IR>> {
+    pub fn load_protobuf(message: proto::Ir) -> Result<Node<IR>> {
         // Load IR protobuf message.
         let mut ir = Box::new(IR {
             uuid: crate::util::parse_uuid(&message.uuid)?,
             version: message.version,
-            modules: Vec::with_capacity(message.modules.len()),
             ..Default::default()
         });
 
         // Load Module protobuf messages.
-        // for m in message.modules.into_iter() {
-        //     ir.add_module(Module::load_protobuf(m)?);
-        // }
+        for m in message.modules.into_iter() {
+            ir.add_module(Module::load_protobuf(m)?);
+        }
 
-        Ok(ir)
+        Ok(Node {
+            ptr: Box::into_raw(ir),
+            kind: PhantomData,
+        })
     }
 
-    pub fn read<P: AsRef<Path>>(path: P) -> Result<Box<IR>> {
+    pub fn read<P: AsRef<Path>>(path: P) -> Result<Node<IR>> {
         let bytes = std::fs::read(path)?;
         IR::load_protobuf(proto::Ir::decode(&*bytes)?)
     }
@@ -61,58 +61,42 @@ impl IR {
         self.version = version;
     }
 
-    pub fn modules(&self) -> Iter<Module, Self> {
-        Iter {
-            iter: self.modules.iter(),
-            lender: &self,
-        }
+    pub fn modules(&self) -> impl Iterator<Item = &Node<Module>> {
+        self.modules.values()
     }
 
-    // pub fn modules_mut(&mut self) -> IterMut<Module> {
-    //     IterMut {
-    //         iter: self.modules.iter_mut(),
-    //         lender: &mut self,
-    //     }
-    // }
+    pub fn modules_mut(&mut self) -> impl Iterator<Item = &mut Node<Module>> {
+        self.modules.values_mut()
+    }
 
-    // pub fn add_module(&mut self, mut module: Module) {
-    //     module.parent = self;
-    //     self.modules.push(module.ptr);
-    //     self.index.modules.insert(module.uuid(), module.ptr);
-    // }
+    pub fn add_module(&mut self, mut module: Node<Module>) {
+        module.parent = Some(Node {
+            ptr: self,
+            kind: PhantomData,
+        });
+        self.modules.insert(module.uuid(), module);
+    }
 
-    // pub fn remove_module(&mut self, module: NodeRef<Module>) {
-    //     if let Some(pos) = self
-    //         .modules
-    //         .iter()
-    //         .position(|ptr| *ptr as *const Module == module.ptr)
-    //     {
-    //         // Remove the indexes for the node.
-    //         assert!(self.index.modules.remove(&module.uuid()).is_some());
-    //         // Remove the raw pointer from child node list.
-    //         self.modules.remove(pos);
-    //         // TODO: Free the subtree!
-    //     }
-    // }
+    pub fn remove_module(&mut self, uuid: Uuid) -> Option<Node<Module>> {
+        if let Some(mut module) = self.modules.remove(&uuid) {
+            module.parent.take();
+            Some(module)
+        } else {
+            None
+        }
+        // TODO: Dangling pointer
+    }
 
-    // pub fn find_node<T>(&self, uuid: Uuid) -> Option<NodeRef<T>> {
-    //     if let Some(ptr) = self.index.modules.get(&uuid) {
-    //         Some(NodeRef::from_raw(*ptr as *const T))
-    //     } else {
-    //         None
-    //     }
-    // }
+    pub fn find_node(&self, uuid: &Uuid) -> Option<&Node<Module>> {
+        self.modules.get(uuid)
+    }
 
-    // pub fn find_node_mut<T>(&mut self, uuid: Uuid) -> Option<NodeMut<T>> {
-    //     if let Some(ptr) = self.index.modules.get(&uuid) {
-    //         Some(NodeMut::from_raw(*ptr as *mut T))
-    //     } else {
-    //         None
-    //     }
-    // }
+    pub fn find_node_mut(&mut self, uuid: &Uuid) -> Option<&mut Node<Module>> {
+        self.modules.get_mut(uuid)
+    }
 }
 
-pub fn read<P: AsRef<Path>>(path: P) -> Result<Box<IR>> {
+pub fn read<P: AsRef<Path>>(path: P) -> Result<Node<IR>> {
     let bytes = std::fs::read(path)?;
     IR::load_protobuf(proto::Ir::decode(&*bytes)?)
 }
@@ -145,46 +129,49 @@ mod tests {
         let mut ir = IR::new();
         let module = Module::new("dummy");
         ir.add_module(module);
+
         let module = ir.modules().nth(0);
         assert!(module.is_some());
-        assert_eq!(module.unwrap().ir().unwrap(), ir);
+        // TODO: Try removing .uuid()
+        assert_eq!(module.unwrap().ir().unwrap().uuid(), ir.uuid());
     }
 
     #[test]
     fn can_remove_module() {
         let mut ir = IR::new();
+
         let module = Module::new("dummy");
+        let uuid = module.uuid();
         ir.add_module(module);
 
         let module = ir.modules().last().unwrap();
-        let uuid = module.uuid();
-        ir.remove_module(module);
+
+        ir.remove_module(uuid);
         assert_eq!(ir.modules().count(), 0);
 
-        let node: Option<NodeRef<Module>> = ir.find_node(uuid);
-        assert!(node.is_none());
+        // let node = ir.find_node::<Node<Module>>(uuid);
+        // assert!(node.is_none());
     }
 
-    #[test]
-    fn can_find_node_by_uuid() {
-        let mut ir = IR::new();
-        let module = Module::new("foo");
-        let uuid = module.uuid();
-        ir.add_module(module);
+    // #[test]
+    // fn can_find_node_by_uuid() {
+    //     let mut ir = IR::new();
+    //     let module = Module::new("foo");
+    //     let uuid = module.uuid();
+    //     ir.add_module(module);
 
-        let node: Option<NodeRef<Module>> = ir.find_node(uuid);
-        assert!(node.is_some());
-        assert_eq!(uuid, node.unwrap().uuid());
+    //     let node: Option<Node<Module>> = ir.find_node(uuid);
+    //     assert!(node.is_some());
+    //     assert_eq!(uuid, node.unwrap().uuid());
 
-        let mut node: NodeMut<Module> = ir.find_node_mut(uuid).unwrap();
-        node.set_name("bar");
+    //     let mut node: Node<Module> = ir.find_node_mut(uuid).unwrap();
+    //     node.set_name("bar");
 
-        let module = ir.modules_mut().last().unwrap();
-        assert_eq!(module.name(), "bar");
+    //     let module = ir.modules().last().unwrap();
+    //     assert_eq!(module.name(), "bar");
 
-        // XXX: THIS SHOULDN'T BE POSSIBLE
-        node.set_name("baz");
-    }
+    //     node.set_name("baz");
+    // }
 
     #[test]
     fn can_modify_modules() {

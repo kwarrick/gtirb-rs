@@ -16,12 +16,12 @@ pub struct Module {
     // sections: Vec<Index>,
     // symbols: Vec<Index>,
     // proxy_blocks: Vec<Index>,
-    pub(crate) parent: *mut IR,
+    pub(crate) parent: Option<Node<IR>>,
 }
 
 impl Module {
-    pub fn new(name: &str) -> Module {
-        Module {
+    pub fn new(name: &str) -> Node<Module> {
+        let node = Box::new(Module {
             uuid: Uuid::new_v4(),
             name: name.to_owned(),
             binary_path: String::new(),
@@ -31,11 +31,15 @@ impl Module {
             rebase_delta: 0,
             preferred_address: Addr(0),
             file_format: FileFormat::FormatUndefined,
-            parent: std::ptr::null_mut(),
+            parent: None,
+        });
+        Node {
+            ptr: Box::into_raw(node),
+            kind: PhantomData,
         }
     }
 
-    pub fn load_protobuf(message: proto::Module) -> Result<Box<Module>> {
+    pub fn load_protobuf(message: proto::Module) -> Result<Node<Module>> {
         let format = FileFormat::from_i32(message.file_format)
             .ok_or(anyhow!("Invalid FileFormat"))?;
 
@@ -62,7 +66,7 @@ impl Module {
         //     .map(|m| ProxyBlock::load_protobuf(context.clone(), m))
         //     .collect::<Result<Vec<Index>>>()?;
 
-        let module = Box::new(Module {
+        let node = Box::new(Module {
             uuid: crate::util::parse_uuid(&message.uuid)?,
             name: message.name,
             binary_path: message.binary_path,
@@ -75,10 +79,13 @@ impl Module {
             // sections: sections,
             // symbols: symbols,
             // proxy_blocks: proxy_blocks,
-            parent: std::ptr::null_mut(),
+            parent: None,
         });
 
-        Ok(module)
+        Ok(Node {
+            ptr: Box::into_raw(node),
+            kind: PhantomData,
+        })
     }
 
     pub fn uuid(&self) -> Uuid {
@@ -89,39 +96,17 @@ impl Module {
         self.uuid = uuid;
     }
 
-    pub fn ir(&self) -> Option<NodeRef<IR, Self>> {
-        if self.parent.is_null() {
-            None
-        } else {
-            Some(NodeRef {
-                ptr: self.parent,
-                kind: PhantomData,
-                lender: &self,
-            })
-        }
+    pub fn ir(&self) -> Option<&Node<IR>> {
+        self.parent.as_ref()
     }
 
-    // fn ir_mut(&mut self) -> Option<NodeMut<IR>> {
-    //     if self.parent.is_null() {
-    //         None
-    //     } else {
-    //         Some(NodeMut {
-    //             ptr: self.parent,
-    //             kind: PhantomData,
-    //         })
-    //     }
-    // }
+    fn ir_mut(&mut self) -> Option<&mut Node<IR>> {
+        self.parent.as_mut()
+    }
 
-    // pub fn into_ir(self) -> Option<NodeMut<IR>> {
-    //     if self.parent.is_null() {
-    //         None
-    //     } else {
-    //         Some(NodeMut {
-    //             ptr: self.parent,
-    //             kind: PhantomData,
-    //         })
-    //     }
-    // }
+    pub fn into_ir(self) -> Option<Node<IR>> {
+        self.parent
+    }
 
     pub fn name(&self) -> &str {
         &self.name
@@ -306,6 +291,10 @@ mod tests {
     #[test]
     fn new_module_is_unique() {
         assert_ne!(Module::new("a"), Module::new("a"));
+
+        let ir = IR::new();
+        let mut m = Module::new("A");
+        m.set_name("foo");
     }
 
     //     #[test]
