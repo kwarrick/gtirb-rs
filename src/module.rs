@@ -16,15 +16,14 @@ pub struct Module {
     // sections: Vec<Index>,
     // symbols: Vec<Index>,
     // proxy_blocks: Vec<Index>,
-    pub(crate) parent: Option<Node<IR>>,
+    pub(crate) parent: Option<*mut IR>,
 }
 
 impl Module {
     pub fn new(context: &mut Context, name: &str) -> Node<Module> {
-        let uuid = Uuid::new_v4();
-        let module = Box::new(Module {
+        let module = Module {
             name: name.to_owned(),
-            uuid: uuid.clone(),
+            uuid: Uuid::new_v4(),
             binary_path: String::new(),
             entry_point: None,
             byte_order: ByteOrder::Undefined,
@@ -33,9 +32,8 @@ impl Module {
             preferred_address: Addr(0),
             file_format: FileFormat::FormatUndefined,
             parent: None,
-        });
-        let module = context.add_module(uuid, Box::into_raw(module));
-        Node::new(context, module)
+        };
+        module.allocate(context)
     }
 
     pub fn load_protobuf(
@@ -50,28 +48,9 @@ impl Module {
         let byte_order = ByteOrder::from_i32(message.byte_order)
             .ok_or(anyhow!("Invalid ByteOrder"))?;
 
-        // let sections = message
-        //     .sections
-        //     .into_iter()
-        //     .map(|m| Section::load_protobuf(context.clone(), m))
-        //     .collect::<Result<Vec<Index>>>()?;
-
-        // let symbols = message
-        //     .symbols
-        //     .into_iter()
-        //     .map(|m| Symbol::load_protobuf(context.clone(), m))
-        //     .collect::<Result<Vec<Index>>>()?;
-
-        // let proxy_blocks = message
-        //     .proxies
-        //     .into_iter()
-        //     .map(|m| ProxyBlock::load_protobuf(context.clone(), m))
-        //     .collect::<Result<Vec<Index>>>()?;
-
-        let uuid = crate::util::parse_uuid(&message.uuid)?;
-        let module = Box::new(Module {
+        let module = Module {
             name: message.name,
-            uuid: uuid.clone(),
+            uuid: crate::util::parse_uuid(&message.uuid)?,
             binary_path: message.binary_path,
             entry_point: Some(crate::util::parse_uuid(&message.entry_point)?),
             byte_order: byte_order,
@@ -83,10 +62,15 @@ impl Module {
             // symbols: symbols,
             // proxy_blocks: proxy_blocks,
             parent: None,
-        });
+        };
+        let module = module.allocate(context);
 
-        let module = context.add_module(uuid, Box::into_raw(module));
-        Ok(Node::new(context, module))
+        // TODO:
+        // Section::load_protobuf(context, m);
+        // Symbol::load_protobuf(context, m);
+        // ProxyBlock::load_protobuf(context, m);
+
+        Ok(module)
     }
 
     pub fn uuid(&self) -> Uuid {
@@ -97,12 +81,13 @@ impl Module {
         self.uuid = uuid;
     }
 
-    pub fn ir(&self) -> Option<&Node<IR>> {
-        self.parent.as_ref()
+    pub fn ir(&self) -> Option<&IR> {
+        self.parent.map(|ptr| unsafe { &*ptr })
     }
 
-    fn ir_mut(&mut self) -> Option<&mut Node<IR>> {
-        self.parent.as_mut()
+    // TODO: Pin? Calling std::mem::swap on these would be incoherent.
+    fn ir_mut(&mut self) -> Option<&mut IR> {
+        self.parent.map(|ptr| unsafe { &mut *ptr })
     }
 
     pub fn name(&self) -> &str {
@@ -279,6 +264,21 @@ impl Module {
 
     // symbolic_expressions()
     // get_symbol_reference<T>(symbol: Symbol) -> Node<T>
+}
+
+impl Allocate<Module> for Module {
+    fn allocate(self, context: &mut Context) -> Node<Module> {
+        let uuid = self.uuid();
+        let ptr = Box::into_raw(Box::new(self));
+        context.modules.insert(uuid, ptr);
+        Node::new(context, ptr)
+    }
+}
+
+impl Index<Module> for Module {
+    fn find(context: &Context, uuid: &Uuid) -> Option<*mut Module> {
+        context.modules.get(uuid).map(|ptr| *ptr)
+    }
 }
 
 #[cfg(test)]

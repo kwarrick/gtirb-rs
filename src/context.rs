@@ -45,11 +45,18 @@ impl Context {
         node
     }
 
-    // pub fn find_node<T>(&self, uuid: &Uuid) -> Option<&Node<T>> {
-    //     self.modules.get(uuid)
-    // }
+    pub fn find_node<T>(&self, uuid: &Uuid) -> Option<&T>
+    where
+        T: Index<T>,
+    {
+        T::find(self, uuid).map(|ptr| unsafe { &*ptr })
+    }
 
-    // pub fn find_node_mut<T>(&mut self, uuid: &Uuid) -> Option<&mut Node<T>> {
-    //     self.modules.get_mut(uuid)
-    // }
+    // TODO: Pin? Allows multiple mutable references:
+    pub fn find_node_mut<T>(&mut self, uuid: &Uuid) -> Option<&mut T>
+    where
+        T: Index<T>,
+    {
+        T::find(self, uuid).map(|ptr| unsafe { &mut *ptr })
+    }
 }

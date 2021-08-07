@@ -11,14 +11,12 @@ pub struct IR {
 
 impl IR {
     pub fn new(context: &mut Context) -> Node<IR> {
-        let uuid = Uuid::new_v4();
-        let ir = Box::new(IR {
-            uuid: uuid.clone(),
+        let ir = IR {
+            uuid: Uuid::new_v4(),
             version: 1,
             modules: HashMap::new(),
-        });
-        let ir = context.add_ir(uuid, Box::into_raw(ir));
-        Node::new(context, ir)
+        };
+        ir.allocate(context)
     }
 
     pub fn load_protobuf(
@@ -26,19 +24,19 @@ impl IR {
         message: proto::Ir,
     ) -> Result<Node<IR>> {
         // Load IR protobuf message.
-        let mut ir = Box::new(IR {
+        let ir = IR {
             uuid: crate::util::parse_uuid(&message.uuid)?,
             version: message.version,
             modules: HashMap::new(),
-        });
+        };
+        let mut ir = ir.allocate(context);
 
         // Load Module protobuf messages.
         for m in message.modules.into_iter() {
             ir.add_module(Module::load_protobuf(context, m)?);
         }
 
-        let ir = Box::into_raw(ir);
-        Ok(Node::new(context, ir))
+        Ok(ir)
     }
 
     pub fn uuid(&self) -> Uuid {
@@ -69,11 +67,7 @@ impl IR {
         &mut self,
         mut module: Node<Module>,
     ) -> Option<Node<Module>> {
-        module.parent = Some(Node {
-            ptr: self,
-            ctx: std::ptr::null_mut(),
-            kind: PhantomData,
-        });
+        module.parent = Some(self);
         self.modules.insert(module.uuid(), module)
     }
 
@@ -84,6 +78,21 @@ impl IR {
         } else {
             None
         }
+    }
+}
+
+impl Allocate<IR> for IR {
+    fn allocate(self, context: &mut Context) -> Node<IR> {
+        let uuid = self.uuid();
+        let ptr = Box::into_raw(Box::new(self));
+        context.ir.insert(uuid, ptr);
+        Node::new(context, ptr)
+    }
+}
+
+impl Index<IR> for IR {
+    fn find(context: &Context, uuid: &Uuid) -> Option<*mut IR> {
+        context.ir.get(uuid).map(|ptr| *ptr)
     }
 }
 
@@ -138,29 +147,28 @@ mod tests {
         assert_eq!(ir.modules().count(), 0);
 
         // TODO:
-        // let node = ir.find_node::<Node<Module>>(uuid);
-        // assert!(node.is_none());
+        let node = ctx.find_node::<Module>(&uuid);
+        assert!(node.is_none());
     }
 
-    // #[test]
-    // fn can_find_node_by_uuid() {
-    //     let mut ir = IR::new();
-    //     let module = Module::new("foo");
-    //     let uuid = module.uuid();
-    //     ir.add_module(module);
+    #[test]
+    fn can_find_node_by_uuid() {
+        let mut ctx = Context::new();
+        let mut ir = IR::new(&mut ctx);
+        let module = Module::new(&mut ctx, "foo");
+        let uuid = module.uuid();
+        ir.add_module(module);
 
-    //     let node: Option<Node<Module>> = ir.find_node(&uuid);
-    //     assert!(node.is_some());
-    //     assert_eq!(uuid, node.unwrap().uuid());
+        let node: Option<&Module> = ctx.find_node(&uuid);
+        assert!(node.is_some());
+        assert_eq!(uuid, node.unwrap().uuid());
 
-    //     let mut node: Node<Module> = ir.find_node_mut(&uuid).unwrap();
-    //     node.set_name("bar");
+        let node: &mut Module = ctx.find_node_mut(&uuid).unwrap();
+        node.set_name("bar");
 
-    //     let module = ir.modules().last().unwrap();
-    //     assert_eq!(module.name(), "bar");
-
-    //     node.set_name("baz");
-    // }
+        let module = ir.modules().last().unwrap();
+        assert_eq!(module.name(), "bar");
+    }
 
     // #[test]
     // fn can_modify_modules() {

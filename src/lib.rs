@@ -56,21 +56,30 @@ pub struct Node<T> {
 }
 
 impl<T> Node<T> {
-    fn new(ctx: *mut Context, ptr: *mut T) -> Self {
+    fn new(context: &mut Context, ptr: *mut T) -> Self {
         Node {
             ptr,
-            ctx,
+            ctx: &mut *context,
             kind: PhantomData,
         }
     }
 }
 
-// TODO: Use the Context pointer to remove the node and free values.
-// impl<T> Drop for Node<T> {
-//     fn drop(&mut self) {
-//         // let _: Box<T> = unsafe { Box::from_raw(self.ptr) };
-//     }
-// }
+pub trait Allocate<T> {
+    fn allocate(self, context: &mut Context) -> Node<T>;
+}
+
+pub trait Deallocate<T> {
+    fn deallocate(self, context: &mut Context);
+}
+
+pub trait Index<T> {
+    fn find(context: &Context, uuid: &Uuid) -> Option<*mut T>;
+}
+
+type Iter<'a, T> = std::slice::Iter<'a, Node<T>>;
+
+type IterMut<'a, T> = std::slice::IterMut<'a, Node<T>>;
 
 impl<T> PartialEq for Node<T>
 where
@@ -97,7 +106,11 @@ impl<T> DerefMut for Node<T> {
     }
 }
 
-type Iter<'a, T> = std::slice::Iter<'a, Node<T>>;
-type IterMut<'a, T> = std::slice::IterMut<'a, Node<T>>;
+// TODO: Use the Context pointer to remove the node and free values.
+// impl<T> Drop for Node<T> {
+//     fn drop(&mut self) {
+//         // let _: Box<T> = unsafe { Box::from_raw(self.ptr) };
+//     }
+// }
 
 pub type GTIRB = Context;
