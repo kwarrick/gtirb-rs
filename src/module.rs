@@ -20,10 +20,11 @@ pub struct Module {
 }
 
 impl Module {
-    pub fn new(name: &str) -> Node<Module> {
-        let node = Box::new(Module {
-            uuid: Uuid::new_v4(),
+    pub fn new(context: &mut Context, name: &str) -> Node<Module> {
+        let uuid = Uuid::new_v4();
+        let module = Box::new(Module {
             name: name.to_owned(),
+            uuid: uuid.clone(),
             binary_path: String::new(),
             entry_point: None,
             byte_order: ByteOrder::Undefined,
@@ -33,13 +34,14 @@ impl Module {
             file_format: FileFormat::FormatUndefined,
             parent: None,
         });
-        Node {
-            ptr: Box::into_raw(node),
-            kind: PhantomData,
-        }
+        let module = context.add_module(uuid, Box::into_raw(module));
+        Node::new(context, module)
     }
 
-    pub fn load_protobuf(message: proto::Module) -> Result<Node<Module>> {
+    pub fn load_protobuf(
+        context: &mut Context,
+        message: proto::Module,
+    ) -> Result<Node<Module>> {
         let format = FileFormat::from_i32(message.file_format)
             .ok_or(anyhow!("Invalid FileFormat"))?;
 
@@ -66,9 +68,10 @@ impl Module {
         //     .map(|m| ProxyBlock::load_protobuf(context.clone(), m))
         //     .collect::<Result<Vec<Index>>>()?;
 
-        let node = Box::new(Module {
-            uuid: crate::util::parse_uuid(&message.uuid)?,
+        let uuid = crate::util::parse_uuid(&message.uuid)?;
+        let module = Box::new(Module {
             name: message.name,
+            uuid: uuid.clone(),
             binary_path: message.binary_path,
             entry_point: Some(crate::util::parse_uuid(&message.entry_point)?),
             byte_order: byte_order,
@@ -82,10 +85,8 @@ impl Module {
             parent: None,
         });
 
-        Ok(Node {
-            ptr: Box::into_raw(node),
-            kind: PhantomData,
-        })
+        let module = context.add_module(uuid, Box::into_raw(module));
+        Ok(Node::new(context, module))
     }
 
     pub fn uuid(&self) -> Uuid {
@@ -102,10 +103,6 @@ impl Module {
 
     fn ir_mut(&mut self) -> Option<&mut Node<IR>> {
         self.parent.as_mut()
-    }
-
-    pub fn into_ir(self) -> Option<Node<IR>> {
-        self.parent
     }
 
     pub fn name(&self) -> &str {
@@ -290,11 +287,8 @@ mod tests {
 
     #[test]
     fn new_module_is_unique() {
-        assert_ne!(Module::new("a"), Module::new("a"));
-
-        let ir = IR::new();
-        let mut m = Module::new("A");
-        m.set_name("foo");
+        let mut ctx = Context::new();
+        assert_ne!(Module::new(&mut ctx, "a"), Module::new(&mut ctx, "a"));
     }
 
     //     #[test]
