@@ -275,6 +275,13 @@ impl Allocate<Module> for Module {
     }
 }
 
+impl Deallocate for Module {
+    fn deallocate(self, context: &mut Context) {
+        // TODO:
+        context.modules.remove(&self.uuid);
+    }
+}
+
 impl Index<Module> for Module {
     fn find(context: &Context, uuid: &Uuid) -> Option<*mut Module> {
         context.modules.get(uuid).map(|ptr| *ptr)

@@ -90,6 +90,13 @@ impl Allocate<IR> for IR {
     }
 }
 
+impl Deallocate for IR {
+    fn deallocate(self, context: &mut Context) {
+        // TODO:
+        context.modules.remove(&self.uuid);
+    }
+}
+
 impl Index<IR> for IR {
     fn find(context: &Context, uuid: &Uuid) -> Option<*mut IR> {
         context.ir.get(uuid).map(|ptr| *ptr)
@@ -143,10 +150,12 @@ mod tests {
         let uuid = module.uuid();
         ir.add_module(module);
 
-        ir.remove_module(uuid);
-        assert_eq!(ir.modules().count(), 0);
+        {
+            let _module = ir.remove_module(uuid);
+            assert_eq!(ir.modules().count(), 0);
+        }
+        // Module should be dropped after preceding scope.
 
-        // TODO:
         let node = ctx.find_node::<Module>(&uuid);
         assert!(node.is_none());
     }
@@ -170,14 +179,15 @@ mod tests {
         assert_eq!(module.name(), "bar");
     }
 
-    // #[test]
-    // fn can_modify_modules() {
-    //     let mut ir = IR::new();
-    //     ir.add_module(Module::new("foo"));
-    //     ir.add_module(Module::new("bar"));
-    //     for mut module in ir.modules_mut() {
-    //         module.set_preferred_address(Addr(1));
-    //     }
-    //     assert!(ir.modules().all(|m| m.preferred_address() == 1.into()));
-    // }
+    #[test]
+    fn can_modify_modules() {
+        let mut ctx = Context::new();
+        let mut ir = IR::new(&mut ctx);
+        ir.add_module(Module::new(&mut ctx, "foo"));
+        ir.add_module(Module::new(&mut ctx, "bar"));
+        for module in ir.modules_mut() {
+            module.set_preferred_address(Addr(1));
+        }
+        assert!(ir.modules().all(|m| m.preferred_address() == 1.into()));
+    }
 }

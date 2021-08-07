@@ -16,18 +16,6 @@ impl Context {
         })
     }
 
-    pub fn read<P: AsRef<Path>>(path: P) -> Result<Box<Context>> {
-        let bytes = std::fs::read(path)?;
-
-        let mut context = Context::new();
-        let message = proto::Ir::decode(&*bytes)?;
-        let node = IR::load_protobuf(&mut context, message)?;
-        let uuid = node.uuid();
-        context.add_ir(uuid, node.ptr);
-
-        Ok(context)
-    }
-
     // TODO:
     // fn add_node<T>(node: Node<T>) {}
 

@@ -17,13 +17,13 @@ mod addr;
 use addr::*;
 
 mod context;
-use context::Context;
+pub use context::Context;
 
 mod ir;
-use ir::IR;
+pub use ir::IR;
 
 mod module;
-use module::Module;
+pub use module::Module;
 
 // mod section;
 // use section::Section;
@@ -49,13 +49,19 @@ use module::Module;
 mod util;
 
 #[derive(Debug)]
-pub struct Node<T> {
+pub struct Node<T>
+where
+    T: Allocate<T> + Deallocate,
+{
     ptr: *mut T,
     ctx: *mut Context,
     kind: PhantomData<T>,
 }
 
-impl<T> Node<T> {
+impl<T> Node<T>
+where
+    T: Allocate<T> + Deallocate,
+{
     fn new(context: &mut Context, ptr: *mut T) -> Self {
         Node {
             ptr,
@@ -65,16 +71,39 @@ impl<T> Node<T> {
     }
 }
 
-pub trait Allocate<T> {
+pub trait Allocate<T>
+where
+    T: Allocate<T> + Deallocate,
+{
     fn allocate(self, context: &mut Context) -> Node<T>;
 }
 
-pub trait Deallocate<T> {
+pub trait Deallocate {
     fn deallocate(self, context: &mut Context);
 }
 
 pub trait Index<T> {
     fn find(context: &Context, uuid: &Uuid) -> Option<*mut T>;
+}
+
+// impl<T> Deallocate for Node<T>
+// {
+//     fn deallocate(self, context: &mut Context) {
+//         // let node: Box<T> = unsafe { Box::from_raw(self.ptr) };
+//     }
+// }
+
+impl<T> Drop for Node<T>
+where
+    T: Allocate<T> + Deallocate,
+{
+    fn drop(&mut self) {
+        assert!(!self.ptr.is_null());
+        assert!(!self.ctx.is_null());
+        println!("Drop: {:?}", self.ptr);
+        let node = unsafe { Box::from_raw(self.ptr) };
+        node.deallocate(unsafe { &mut *self.ctx });
+    }
 }
 
 type Iter<'a, T> = std::slice::Iter<'a, Node<T>>;
@@ -83,14 +112,17 @@ type IterMut<'a, T> = std::slice::IterMut<'a, Node<T>>;
 
 impl<T> PartialEq for Node<T>
 where
-    T: PartialEq,
+    T: PartialEq + Allocate<T> + Deallocate,
 {
     fn eq(&self, other: &Self) -> bool {
         self.deref() == other.deref()
     }
 }
 
-impl<T> Deref for Node<T> {
+impl<T> Deref for Node<T>
+where
+    T: Allocate<T> + Deallocate,
+{
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -99,18 +131,24 @@ impl<T> Deref for Node<T> {
     }
 }
 
-impl<T> DerefMut for Node<T> {
+impl<T> DerefMut for Node<T>
+where
+    T: Allocate<T> + Deallocate,
+{
     fn deref_mut(&mut self) -> &mut Self::Target {
         assert!(!self.ptr.is_null());
         unsafe { &mut *self.ptr }
     }
 }
 
-// TODO: Use the Context pointer to remove the node and free values.
-// impl<T> Drop for Node<T> {
-//     fn drop(&mut self) {
-//         // let _: Box<T> = unsafe { Box::from_raw(self.ptr) };
-//     }
-// }
+pub fn read<P: AsRef<Path>>(path: P) -> Result<Box<Context>> {
+    let bytes = std::fs::read(path)?;
 
-pub type GTIRB = Context;
+    let mut context = Context::new();
+    let message = proto::Ir::decode(&*bytes)?;
+    let node = IR::load_protobuf(&mut context, message)?;
+    let uuid = node.uuid();
+    context.add_ir(uuid, node.ptr);
+
+    Ok(context)
+}
