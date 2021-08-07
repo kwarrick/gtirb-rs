@@ -100,7 +100,6 @@ where
     fn drop(&mut self) {
         assert!(!self.ptr.is_null());
         assert!(!self.ctx.is_null());
-        println!("Drop: {:?}", self.ptr);
         let node = unsafe { Box::from_raw(self.ptr) };
         node.deallocate(unsafe { &mut *self.ctx });
     }
@@ -141,14 +140,14 @@ where
     }
 }
 
-pub fn read<P: AsRef<Path>>(path: P) -> Result<Box<Context>> {
+pub fn read<P: AsRef<Path>>(path: P) -> Result<(Box<Context>, Node<IR>)> {
+    // Read protobuf file.
     let bytes = std::fs::read(path)?;
-
-    let mut context = Context::new();
     let message = proto::Ir::decode(&*bytes)?;
-    let node = IR::load_protobuf(&mut context, message)?;
-    let uuid = node.uuid();
-    context.add_ir(uuid, node.ptr);
 
-    Ok(context)
+    // Create a context and load the IR.
+    let mut context = Context::new();
+    let ir = IR::load_protobuf(&mut context, message)?;
+
+    Ok((context, ir))
 }
