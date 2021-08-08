@@ -154,29 +154,10 @@ mod tests {
             let _module = ir.remove_module(uuid);
             assert_eq!(ir.modules().count(), 0);
         }
-        // Module should be dropped after preceding scope.
 
+        // Module should be dropped after preceding scope.
         let node = ctx.find_node::<Module>(&uuid);
         assert!(node.is_none());
-    }
-
-    #[test]
-    fn can_find_node_by_uuid() {
-        let mut ctx = Context::new();
-        let mut ir = IR::new(&mut ctx);
-        let module = Module::new(&mut ctx, "foo");
-        let uuid = module.uuid();
-        ir.add_module(module);
-
-        let node: Option<&Module> = ctx.find_node(&uuid);
-        assert!(node.is_some());
-        assert_eq!(uuid, node.unwrap().uuid());
-
-        let node: &mut Module = ctx.find_node_mut(&uuid).unwrap();
-        node.set_name("bar");
-
-        let module = ir.modules().last().unwrap();
-        assert_eq!(module.name(), "bar");
     }
 
     #[test]
