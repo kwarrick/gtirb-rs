@@ -6,7 +6,7 @@ use crate::*;
 pub struct IR {
     uuid: Uuid,
     version: u32,
-    modules: HashMap<Uuid, Node<Module>>,
+    modules: HashMap<Uuid, *mut Module>,
 }
 
 impl IR {
@@ -54,30 +54,29 @@ impl IR {
     pub fn set_version(&mut self, version: u32) {
         self.version = version;
     }
+}
 
-    pub fn modules(&self) -> impl Iterator<Item = &Node<Module>> {
-        self.modules.values()
-    }
-
-    pub fn modules_mut(&mut self) -> impl Iterator<Item = &mut Node<Module>> {
-        self.modules.values_mut()
-    }
-
+impl Node<IR> {
     pub fn add_module(
         &mut self,
         mut module: Node<Module>,
-    ) -> Option<Node<Module>> {
-        module.parent = Some(self);
-        self.modules.insert(module.uuid(), module)
+    ) {
+        module.deref_mut().parent = Some(self.inner);
+        self.modules.insert(module.uuid(), module.inner);
     }
 
     pub fn remove_module(&mut self, uuid: Uuid) -> Option<Node<Module>> {
-        if let Some(mut module) = self.modules.remove(&uuid) {
+        if let Some(ptr) = self.deref_mut().modules.remove(&uuid) {
+            let mut module = Node::from_raw(self.context, ptr);
             module.parent = None;
             Some(module)
         } else {
             None
         }
+    }
+
+    pub fn modules(&self) -> Iter<Module> {
+        Iter { iter: self.modules.iter(), context: self.context }
     }
 }
 
@@ -166,7 +165,7 @@ mod tests {
         let mut ir = IR::new(&mut ctx);
         ir.add_module(Module::new(&mut ctx, "foo"));
         ir.add_module(Module::new(&mut ctx, "bar"));
-        for module in ir.modules_mut() {
+        for mut module in ir.modules() {
             module.set_preferred_address(Addr(1));
         }
         assert!(ir.modules().all(|m| m.preferred_address() == 1.into()));

@@ -19,21 +19,14 @@ impl Context {
         })
     }
 
-    pub fn find_node<T>(&self, uuid: &Uuid) -> Option<&T>
-    where
-        T: Index<T>,
-    {
-        T::find(self, uuid).map(|ptr| unsafe { &*ptr })
-    }
-
-    // TODO: Pin? Allows multiple mutable references, e.g.:
+    // TODO: XXX: Allows multiple mutable references, e.g.:
     //   let mut a = ir.modules_mut().nth(0).unwrap();
     //   let mut b = ctx.find_node_mut::<Module>(&uuid).unwrap();
-    pub fn find_node_mut<T>(&mut self, uuid: &Uuid) -> Option<&mut T>
+    pub fn find_node<T>(&mut self, uuid: &Uuid) -> Option<Node<T>>
     where
-        T: Index<T>,
+        T: Allocate + Deallocate + Index<T>,
     {
-        T::find(self, uuid).map(|ptr| unsafe { &mut *ptr })
+        T::find(self, uuid).map(|ptr| Node::from_raw(self, ptr))
     }
 }
 
@@ -49,8 +42,8 @@ mod tests {
         let uuid = module.uuid();
         ir.add_module(module);
 
-        let a = ir.modules_mut().nth(0).unwrap();
-        let a_ = ctx.find_node_mut::<Module>(&uuid).unwrap();
+        let mut a = ir.modules().nth(0).unwrap();
+        let mut a_ = ctx.find_node::<Module>(&uuid).unwrap();
 
         a.set_name("foo");
         a_.set_name("bar");
@@ -64,11 +57,11 @@ mod tests {
         let uuid = module.uuid();
         ir.add_module(module);
 
-        let node: Option<&Module> = ctx.find_node(&uuid);
+        let node = ctx.find_node::<Module>(&uuid);
         assert!(node.is_some());
         assert_eq!(uuid, node.unwrap().uuid());
 
-        let node: &mut Module = ctx.find_node_mut(&uuid).unwrap();
+        let mut node = ctx.find_node::<Module>(&uuid).unwrap();
         node.set_name("bar");
 
         let module = ir.modules().last().unwrap();

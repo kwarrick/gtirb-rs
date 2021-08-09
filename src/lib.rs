@@ -69,6 +69,14 @@ where
             kind: PhantomData,
         }
     }
+
+    fn from_raw(context: * mut Context, ptr: *mut T) -> Self {
+        Node {
+            inner: ptr,
+            context: context,
+            kind: PhantomData,
+        }
+    }
 }
 
 pub trait Allocate {
@@ -126,6 +134,22 @@ where
     fn deref_mut(&mut self) -> &mut Self::Target {
         assert!(!self.inner.is_null());
         unsafe { &mut *self.inner }
+    }
+}
+
+pub struct Iter<'a, T>  {
+    iter: std::collections::hash_map::Iter<'a, Uuid, *mut T>,
+    context: *mut Context,
+}
+
+impl<'a, T> Iterator for Iter<'a, T>
+where
+    T: Allocate + Deallocate
+{
+    type Item = Node<T>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next().map(|(_, ptr)| Node::from_raw(self.context, *ptr))
     }
 }
 

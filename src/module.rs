@@ -81,14 +81,8 @@ impl Module {
         self.uuid = uuid;
     }
 
-    pub fn ir(&self) -> Option<&IR> {
-        self.parent.map(|ptr| unsafe { &*ptr })
-    }
-
-    // TODO: Pin? Calling std::mem::swap on these would be incoherent.
-    fn ir_mut(&mut self) -> Option<&mut IR> {
-        self.parent.map(|ptr| unsafe { &mut *ptr })
-    }
+    // TODO:
+    // pub fn ir(&self) -> ??? {}
 
     pub fn name(&self) -> &str {
         &self.name
