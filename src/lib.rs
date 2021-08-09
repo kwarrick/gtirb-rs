@@ -1,7 +1,9 @@
 #![allow(dead_code)]
+use std::cell::RefCell;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 use std::path::Path;
+use std::rc::Rc;
 
 use anyhow::Result;
 use prost::Message;
@@ -51,64 +53,29 @@ mod util;
 #[derive(Debug)]
 pub struct Node<T: Sized>
 where
-    T: Allocate + Deallocate,
+    T: Allocate + Deallocate + Index + Unique + Sized,
 {
     inner: *mut T,
-    context: *mut Context,
     kind: PhantomData<T>,
+    context: Context,
 }
 
 impl<T> Node<T>
 where
-    T: Allocate + Deallocate,
+    T: Allocate + Deallocate + Index + Unique + Sized,
 {
-    fn new(context: &mut Context, ptr: *mut T) -> Self {
+    fn new(context: &Context, ptr: *mut T) -> Self {
         Node {
             inner: ptr,
-            context: &mut *context,
             kind: PhantomData,
+            context: context.clone(),
         }
-    }
-
-    fn from_raw(context: * mut Context, ptr: *mut T) -> Self {
-        Node {
-            inner: ptr,
-            context: context,
-            kind: PhantomData,
-        }
-    }
-}
-
-pub trait Allocate {
-    fn allocate(self, context: &mut Context) -> Node<Self>
-    where
-        Self: Deallocate,
-        Self: Sized;
-}
-
-pub trait Deallocate {
-    fn deallocate(self: Box<Self>, context: &mut Context);
-}
-
-pub trait Index<T> {
-    fn find(context: &Context, uuid: &Uuid) -> Option<*mut T>;
-}
-
-impl<T> Drop for Node<T>
-where
-    T: Allocate + Deallocate,
-{
-    fn drop(&mut self) {
-        assert!(!self.inner.is_null());
-        assert!(!self.context.is_null());
-        let node = unsafe { Box::from_raw(self.inner) };
-        node.deallocate(unsafe { &mut *self.context });
     }
 }
 
 impl<T> PartialEq for Node<T>
 where
-    T: PartialEq + Allocate + Deallocate,
+    T: PartialEq + Allocate + Deallocate + Index + Unique,
 {
     fn eq(&self, other: &Self) -> bool {
         self.deref() == other.deref()
@@ -117,7 +84,7 @@ where
 
 impl<T> Deref for Node<T>
 where
-    T: Allocate + Deallocate,
+    T: Allocate + Deallocate + Index + Unique,
 {
     type Target = T;
 
@@ -129,7 +96,7 @@ where
 
 impl<T> DerefMut for Node<T>
 where
-    T: Allocate + Deallocate,
+    T: Allocate + Deallocate + Index + Unique,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
         assert!(!self.inner.is_null());
@@ -137,23 +104,92 @@ where
     }
 }
 
-pub struct Iter<'a, T>  {
+pub struct Iter<'a, T> {
     iter: std::collections::hash_map::Iter<'a, Uuid, *mut T>,
-    context: *mut Context,
+    context: &'a Context,
 }
 
 impl<'a, T> Iterator for Iter<'a, T>
 where
-    T: Allocate + Deallocate
+    T: Allocate + Deallocate + Index + Unique,
 {
     type Item = Node<T>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next().map(|(_, ptr)| Node::from_raw(self.context, *ptr))
+        self.iter
+            .next()
+            .map(|(_, ptr)| Node::new(self.context, *ptr))
     }
 }
 
-pub fn read<P: AsRef<Path>>(path: P) -> Result<(Box<Context>, Node<IR>)> {
+pub trait Unique {
+    fn uuid(&self) -> Uuid;
+    fn set_uuid(&mut self, uuid: Uuid);
+}
+
+pub trait Index {
+    // Consumes a `T` to produce a raw pointer..
+    fn insert(context: &mut Context, node: Self) -> *mut Self;
+
+    // Receives a raw pointer to produce an owned `Box<T>` for deallocation.
+    fn remove(context: &mut Context, ptr: *mut Self) -> Option<Box<Self>>;
+
+    // Locates a node data as it was indexed and return a raw pointer.
+    fn search(context: &Context, uuid: &Uuid) -> Option<*mut Self>;
+
+    // Determine if node is unrooted, i.e. has no parent node.
+    fn rooted(node: &Self) -> bool;
+}
+
+pub trait Allocate {
+    fn allocate(context: &mut Context, node: Self) -> Node<Self>
+    where
+        Self: Index,
+        Self: Unique,
+        Self: Sized;
+}
+
+impl<T> Allocate for T
+where
+    T: Index + Unique,
+{
+    fn allocate(context: &mut Context, node: Self) -> Node<T> {
+        let ptr = T::insert(context, node);
+        Node::new(context, ptr)
+    }
+}
+
+pub trait Deallocate {
+    fn deallocate(node: &mut Node<Self>)
+    where
+        Self: Index,
+        Self: Unique,
+        Self: Sized;
+}
+
+impl<T> Deallocate for T
+where
+    T: Index + Unique,
+{
+    fn deallocate(node: &mut Node<Self>) {
+        if !T::rooted(node) {
+            T::remove(&mut node.context, node.inner);
+        }
+        node.inner = std::ptr::null_mut();
+    }
+}
+
+impl<T> Drop for Node<T>
+where
+    T: Allocate + Deallocate + Index + Unique,
+{
+    fn drop(&mut self) {
+        assert!(!self.inner.is_null());
+        T::deallocate(self);
+    }
+}
+
+pub fn read<P: AsRef<Path>>(path: P) -> Result<(Context, Node<IR>)> {
     // Read protobuf file.
     let bytes = std::fs::read(path)?;
     let message = proto::Ir::decode(&*bytes)?;

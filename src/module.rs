@@ -33,7 +33,7 @@ impl Module {
             file_format: FileFormat::FormatUndefined,
             parent: None,
         };
-        module.allocate(context)
+        Module::allocate(context, module)
     }
 
     pub fn load_protobuf(
@@ -63,7 +63,7 @@ impl Module {
             // proxy_blocks: proxy_blocks,
             parent: None,
         };
-        let module = module.allocate(context);
+        let module = Module::allocate(context, module);
 
         // TODO:
         // Section::load_protobuf(context, m);
@@ -72,17 +72,6 @@ impl Module {
 
         Ok(module)
     }
-
-    pub fn uuid(&self) -> Uuid {
-        self.uuid
-    }
-
-    pub fn set_uuid(&mut self, uuid: Uuid) {
-        self.uuid = uuid;
-    }
-
-    // TODO:
-    // pub fn ir(&self) -> ??? {}
 
     pub fn name(&self) -> &str {
         &self.name
@@ -260,28 +249,42 @@ impl Module {
     // get_symbol_reference<T>(symbol: Symbol) -> Node<T>
 }
 
-impl Allocate for Module {
-    fn allocate(self, context: &mut Context) -> Node<Module> {
-        let uuid = self.uuid();
-        let ptr = Box::into_raw(Box::new(self));
-        context.modules.insert(uuid, ptr);
-        Node::new(context, ptr)
+impl Unique for Module {
+    fn uuid(&self) -> Uuid {
+        self.uuid
+    }
+
+    fn set_uuid(&mut self, uuid: Uuid) {
+        self.uuid = uuid;
     }
 }
 
-impl Deallocate for Module {
-    fn deallocate(self: Box<Self>, context: &mut Context) {
-        if self.parent.is_none() {
-            context.modules.remove(&self.uuid);
-        } else {
-            Box::leak(self);
-        }
+impl Node<Module> {
+    pub fn ir(&self) -> Option<Node<IR>> {
+        self.parent.map(|ptr| Node::new(&self.context, ptr))
     }
 }
 
-impl Index<Module> for Module {
-    fn find(context: &Context, uuid: &Uuid) -> Option<*mut Module> {
-        context.modules.get(uuid).map(|ptr| *ptr)
+impl Index for Module {
+    fn insert(context: &mut Context, node: Self) -> *mut Self {
+        let uuid = node.uuid();
+        let ptr = Box::into_raw(Box::new(node));
+        context.index.borrow_mut().modules.insert(uuid, ptr);
+        ptr
+    }
+
+    fn remove(context: &mut Context, ptr: *mut Self) -> Option<Box<Self>> {
+        let module = unsafe { Box::from_raw(ptr) };
+        context.index.borrow_mut().modules.remove(&module.uuid);
+        Some(module)
+    }
+
+    fn search(context: &Context, uuid: &Uuid) -> Option<*mut Self> {
+        context.index.borrow().modules.get(uuid).map(|ptr| *ptr)
+    }
+
+    fn rooted(node: &Self) -> bool {
+        node.parent.is_some()
     }
 }
 
@@ -295,62 +298,69 @@ mod tests {
         assert_ne!(Module::new(&mut ctx, "a"), Module::new(&mut ctx, "a"));
     }
 
-    //     #[test]
-    //     fn new_module_is_empty() {
-    //         let ir = IR::new();
-    //         let module = ir.add_module(Module::new("dummy"));
+    #[test]
+    fn new_module_is_empty() {
+        let mut ctx = Context::new();
+        let mut ir = IR::new(&mut ctx);
+        let _module = ir.add_module(Module::new(&mut ctx, "dummy"));
 
-    //         assert_eq!(module.symbols().count(), 0);
-    //         assert_eq!(module.sections().count(), 0);
-    //         assert_eq!(module.proxy_blocks().count(), 0);
-    //     }
+        // TODO:
+        // assert_eq!(module.symbols().count(), 0);
+        // assert_eq!(module.sections().count(), 0);
+        // assert_eq!(module.proxy_blocks().count(), 0);
+    }
 
-    //     #[test]
-    //     fn can_set_binary_path() {
-    //         let ir = IR::new();
-    //         let path = "/home/gt/irb/foo";
-    //         let module = ir.add_module(Module::new("dummy"));
-    //         module.set_binary_path(path);
-    //         assert_eq!(module.binary_path(), path);
-    //     }
+    #[test]
+    fn can_set_binary_path() {
+        let mut ctx = Context::new();
+        let mut ir = IR::new(&mut ctx);
+        let path = "/home/gt/irb/foo";
+        let mut module = ir.add_module(Module::new(&mut ctx, "dummy"));
+        module.set_binary_path(path);
+        assert_eq!(module.binary_path(), path);
+    }
 
-    //     #[test]
-    //     fn can_get_file_format_default() {
-    //         let ir = IR::new();
-    //         let module = ir.add_module(Module::new("dummy"));
-    //         assert_eq!(module.file_format(), FileFormat::FormatUndefined);
-    //     }
+    #[test]
+    fn can_get_file_format_default() {
+        let mut ctx = Context::new();
+        let mut ir = IR::new(&mut ctx);
+        let module = ir.add_module(Module::new(&mut ctx, "dummy"));
+        assert_eq!(module.file_format(), FileFormat::FormatUndefined);
+    }
 
-    //     #[test]
-    //     fn can_set_file_format() {
-    //         let ir = IR::new();
-    //         let module = ir.add_module(Module::new("dummy"));
-    //         module.set_file_format(FileFormat::Coff);
-    //         assert_eq!(module.file_format(), FileFormat::Coff);
+    #[test]
+    fn can_set_file_format() {
+        let mut ctx = Context::new();
+        let mut ir = IR::new(&mut ctx);
+        let mut module = ir.add_module(Module::new(&mut ctx, "dummy"));
+        module.set_file_format(FileFormat::Coff);
+        assert_eq!(module.file_format(), FileFormat::Coff);
 
-    //         module.set_file_format(FileFormat::Macho);
-    //         assert_eq!(module.file_format(), FileFormat::Macho);
-    //     }
+        module.set_file_format(FileFormat::Macho);
+        assert_eq!(module.file_format(), FileFormat::Macho);
+    }
 
-    //     #[test]
-    //     fn can_set_name() {
-    //         let ir = IR::new();
-    //         let module = ir.add_module(Module::new("dummy"));
-    //         module.set_name("example");
-    //         assert_eq!(module.name(), "example");
-    //     }
+    #[test]
+    fn can_set_name() {
+        let mut ctx = Context::new();
+        let mut ir = IR::new(&mut ctx);
+        let mut module = ir.add_module(Module::new(&mut ctx, "dummy"));
+        module.set_name("example");
+        assert_eq!(module.name(), "example");
+    }
 
-    //     #[test]
-    //     fn can_relocate_module() {
-    //         let ir = IR::new();
-    //         let module = ir.add_module(Module::new("dummy"));
-    //         assert!(!module.is_relocated());
-    //         assert_eq!(module.rebase_delta(), 0);
+    #[test]
+    fn can_relocate_module() {
+        let mut ctx = Context::new();
+        let mut ir = IR::new(&mut ctx);
+        let mut module = ir.add_module(Module::new(&mut ctx, "dummy"));
+        assert!(!module.is_relocated());
+        assert_eq!(module.rebase_delta(), 0);
 
-    //         module.set_rebase_delta(0x1000);
-    //         assert!(module.is_relocated());
-    //         assert_eq!(module.rebase_delta(), 0x1000);
-    //     }
+        module.set_rebase_delta(0x1000);
+        assert!(module.is_relocated());
+        assert_eq!(module.rebase_delta(), 0x1000);
+    }
 
     //     #[test]
     //     fn can_add_new_section() {

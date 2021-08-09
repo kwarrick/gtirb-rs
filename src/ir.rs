@@ -16,7 +16,7 @@ impl IR {
             version: 1,
             modules: HashMap::new(),
         };
-        ir.allocate(context)
+        IR::allocate(context, ir)
     }
 
     pub fn load_protobuf(
@@ -29,22 +29,15 @@ impl IR {
             version: message.version,
             modules: HashMap::new(),
         };
-        let mut ir = ir.allocate(context);
+        let mut ir: Node<IR> = IR::allocate(context, ir);
 
         // Load Module protobuf messages.
         for m in message.modules.into_iter() {
-            ir.add_module(Module::load_protobuf(context, m)?);
+            let module = Module::load_protobuf(context, m)?;
+            ir.add_module(module);
         }
 
         Ok(ir)
-    }
-
-    pub fn uuid(&self) -> Uuid {
-        self.uuid
-    }
-
-    pub fn set_uuid(&mut self, uuid: Uuid) {
-        self.uuid = uuid;
     }
 
     pub fn version(&self) -> u32 {
@@ -56,18 +49,26 @@ impl IR {
     }
 }
 
+impl Unique for IR {
+    fn uuid(&self) -> Uuid {
+        self.uuid
+    }
+
+    fn set_uuid(&mut self, uuid: Uuid) {
+        self.uuid = uuid;
+    }
+}
+
 impl Node<IR> {
-    pub fn add_module(
-        &mut self,
-        mut module: Node<Module>,
-    ) {
+    pub fn add_module(&mut self, mut module: Node<Module>) -> Node<Module> {
         module.deref_mut().parent = Some(self.inner);
         self.modules.insert(module.uuid(), module.inner);
+        module
     }
 
     pub fn remove_module(&mut self, uuid: Uuid) -> Option<Node<Module>> {
         if let Some(ptr) = self.deref_mut().modules.remove(&uuid) {
-            let mut module = Node::from_raw(self.context, ptr);
+            let mut module = Node::new(&self.context, ptr);
             module.parent = None;
             Some(module)
         } else {
@@ -76,29 +77,36 @@ impl Node<IR> {
     }
 
     pub fn modules(&self) -> Iter<Module> {
-        Iter { iter: self.modules.iter(), context: self.context }
+        Iter {
+            iter: self.modules.iter(),
+            context: &self.context,
+        }
     }
 }
 
-impl Allocate for IR {
-    fn allocate(self, context: &mut Context) -> Node<IR> {
-        let uuid = self.uuid();
-        let ptr = Box::into_raw(Box::new(self));
-        context.ir.insert(uuid, ptr);
-        Node::new(context, ptr)
+impl Index for IR {
+    fn insert(context: &mut Context, node: Self) -> *mut Self {
+        let uuid = node.uuid();
+        let ptr = Box::into_raw(Box::new(node));
+        context.index.borrow_mut().ir.insert(uuid, ptr);
+        ptr
     }
-}
 
-impl Deallocate for IR {
-    fn deallocate(self: Box<Self>, context: &mut Context) {
-        // TODO:
-        context.modules.remove(&self.uuid);
+    fn remove(context: &mut Context, ptr: *mut Self) -> Option<Box<Self>> {
+        let mut ir = unsafe { Box::from_raw(ptr) };
+        context.index.borrow_mut().ir.remove(&ir.uuid);
+        for ptr in ir.modules.values_mut() {
+            Module::remove(context, *ptr);
+        }
+        Some(ir)
     }
-}
 
-impl Index<IR> for IR {
-    fn find(context: &Context, uuid: &Uuid) -> Option<*mut IR> {
-        context.ir.get(uuid).map(|ptr| *ptr)
+    fn search(context: &Context, uuid: &Uuid) -> Option<*mut Self> {
+        context.index.borrow().ir.get(uuid).map(|ptr| *ptr)
+    }
+
+    fn rooted(_: &Self) -> bool {
+        true
     }
 }
 
