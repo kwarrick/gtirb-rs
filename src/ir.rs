@@ -81,7 +81,7 @@ impl IR {
     }
 }
 
-impl Allocate<IR> for IR {
+impl Allocate for IR {
     fn allocate(self, context: &mut Context) -> Node<IR> {
         let uuid = self.uuid();
         let ptr = Box::into_raw(Box::new(self));

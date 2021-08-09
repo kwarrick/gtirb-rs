@@ -49,33 +49,33 @@ pub use module::Module;
 mod util;
 
 #[derive(Debug)]
-pub struct Node<T>
+pub struct Node<T: Sized>
 where
-    T: Allocate<T> + Deallocate,
+    T: Allocate + Deallocate,
 {
-    ptr: *mut T,
-    ctx: *mut Context,
+    inner: *mut T,
+    context: *mut Context,
     kind: PhantomData<T>,
 }
 
 impl<T> Node<T>
 where
-    T: Allocate<T> + Deallocate,
+    T: Allocate + Deallocate,
 {
     fn new(context: &mut Context, ptr: *mut T) -> Self {
         Node {
-            ptr,
-            ctx: &mut *context,
+            inner: ptr,
+            context: &mut *context,
             kind: PhantomData,
         }
     }
 }
 
-pub trait Allocate<T>
-where
-    T: Allocate<T> + Deallocate,
-{
-    fn allocate(self, context: &mut Context) -> Node<T>;
+pub trait Allocate {
+    fn allocate(self, context: &mut Context) -> Node<Self>
+    where
+        Self: Deallocate,
+        Self: Sized;
 }
 
 pub trait Deallocate {
@@ -86,32 +86,21 @@ pub trait Index<T> {
     fn find(context: &Context, uuid: &Uuid) -> Option<*mut T>;
 }
 
-// impl<T> Deallocate for Node<T>
-// {
-//     fn deallocate(self, context: &mut Context) {
-//         // let node: Box<T> = unsafe { Box::from_raw(self.ptr) };
-//     }
-// }
-
 impl<T> Drop for Node<T>
 where
-    T: Allocate<T> + Deallocate,
+    T: Allocate + Deallocate,
 {
     fn drop(&mut self) {
-        assert!(!self.ptr.is_null());
-        assert!(!self.ctx.is_null());
-        let node = unsafe { Box::from_raw(self.ptr) };
-        node.deallocate(unsafe { &mut *self.ctx });
+        assert!(!self.inner.is_null());
+        assert!(!self.context.is_null());
+        let node = unsafe { Box::from_raw(self.inner) };
+        node.deallocate(unsafe { &mut *self.context });
     }
 }
 
-type Iter<'a, T> = std::slice::Iter<'a, Node<T>>;
-
-type IterMut<'a, T> = std::slice::IterMut<'a, Node<T>>;
-
 impl<T> PartialEq for Node<T>
 where
-    T: PartialEq + Allocate<T> + Deallocate,
+    T: PartialEq + Allocate + Deallocate,
 {
     fn eq(&self, other: &Self) -> bool {
         self.deref() == other.deref()
@@ -120,23 +109,23 @@ where
 
 impl<T> Deref for Node<T>
 where
-    T: Allocate<T> + Deallocate,
+    T: Allocate + Deallocate,
 {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        assert!(!self.ptr.is_null());
-        unsafe { &*self.ptr }
+        assert!(!self.inner.is_null());
+        unsafe { &*self.inner }
     }
 }
 
 impl<T> DerefMut for Node<T>
 where
-    T: Allocate<T> + Deallocate,
+    T: Allocate + Deallocate,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        assert!(!self.ptr.is_null());
-        unsafe { &mut *self.ptr }
+        assert!(!self.inner.is_null());
+        unsafe { &mut *self.inner }
     }
 }
 

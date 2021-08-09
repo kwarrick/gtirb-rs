@@ -266,7 +266,7 @@ impl Module {
     // get_symbol_reference<T>(symbol: Symbol) -> Node<T>
 }
 
-impl Allocate<Module> for Module {
+impl Allocate for Module {
     fn allocate(self, context: &mut Context) -> Node<Module> {
         let uuid = self.uuid();
         let ptr = Box::into_raw(Box::new(self));
