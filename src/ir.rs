@@ -91,7 +91,7 @@ impl Allocate for IR {
 }
 
 impl Deallocate for IR {
-    fn deallocate(self, context: &mut Context) {
+    fn deallocate(self: Box<Self>, context: &mut Context) {
         // TODO:
         context.modules.remove(&self.uuid);
     }

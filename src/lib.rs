@@ -79,7 +79,7 @@ pub trait Allocate {
 }
 
 pub trait Deallocate {
-    fn deallocate(self, context: &mut Context);
+    fn deallocate(self: Box<Self>, context: &mut Context);
 }
 
 pub trait Index<T> {

@@ -276,9 +276,12 @@ impl Allocate for Module {
 }
 
 impl Deallocate for Module {
-    fn deallocate(self, context: &mut Context) {
-        // TODO:
-        context.modules.remove(&self.uuid);
+    fn deallocate(self: Box<Self>, context: &mut Context) {
+        if self.parent.is_none() {
+            context.modules.remove(&self.uuid);
+        } else {
+            Box::leak(self);
+        }
     }
 }
 
