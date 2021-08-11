@@ -1,9 +1,8 @@
 #![allow(dead_code)]
 use std::cell::RefCell;
-use std::marker::PhantomData;
-use std::ops::{Deref, DerefMut};
+use std::cell::{Ref, RefMut};
 use std::path::Path;
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 
 use anyhow::Result;
 use prost::Message;
@@ -50,75 +49,92 @@ pub use module::Module;
 
 mod util;
 
+type NodeBox<T> = Rc<RefCell<T>>;
+
 #[derive(Debug)]
-pub struct Node<T: Sized>
+pub struct Node<T>
 where
-    T: Allocate + Deallocate + Index + Unique + Sized,
+    T: Index + Unique,
 {
-    inner: *mut T,
-    kind: PhantomData<T>,
+    inner: NodeBox<T>,
     context: Context,
 }
 
 impl<T> Node<T>
 where
-    T: Allocate + Deallocate + Index + Unique + Sized,
+    T: Index + Unique,
 {
-    fn new(context: &Context, ptr: *mut T) -> Self {
+    fn new(context: &Context, ptr: NodeBox<T>) -> Self {
         Node {
-            inner: ptr,
-            kind: PhantomData,
+            inner: NodeBox::clone(&ptr),
             context: context.clone(),
+        }
+    }
+
+    fn borrow(&self) -> Ref<T> {
+        self.inner.borrow()
+    }
+
+    fn borrow_mut(&mut self) -> RefMut<T> {
+        self.inner.borrow_mut()
+    }
+
+    fn uuid(&self) -> Uuid {
+        self.inner.borrow().uuid()
+    }
+
+    fn set_uuid(&mut self, uuid: Uuid) {
+        self.inner.borrow_mut().set_uuid(uuid);
+    }
+}
+
+impl<T> Drop for Node<T>
+where
+    T: Index + Unique
+{
+    fn drop(&mut self) {
+        if !T::rooted(Rc::clone(&self.inner)) {
+            eprintln!("dropped: {:?}", self.uuid());
+            T::remove(&mut self.context, Rc::clone(&self.inner));
         }
     }
 }
 
 impl<T> PartialEq for Node<T>
 where
-    T: PartialEq + Allocate + Deallocate + Index + Unique,
+    T: PartialEq + Index + Unique,
 {
     fn eq(&self, other: &Self) -> bool {
-        self.deref() == other.deref()
+        *self.inner.borrow() == *other.inner.borrow()
     }
 }
 
-impl<T> Deref for Node<T>
-where
-    T: Allocate + Deallocate + Index + Unique,
-{
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        assert!(!self.inner.is_null());
-        unsafe { &*self.inner }
-    }
-}
-
-impl<T> DerefMut for Node<T>
-where
-    T: Allocate + Deallocate + Index + Unique,
-{
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        assert!(!self.inner.is_null());
-        unsafe { &mut *self.inner }
-    }
-}
-
-pub struct Iter<'a, T> {
-    iter: std::collections::hash_map::Iter<'a, Uuid, *mut T>,
+pub struct Iter<'a, T: 'a> {
+    inner: Option<Ref<'a, [NodeBox<T>]>>,
     context: &'a Context,
 }
 
 impl<'a, T> Iterator for Iter<'a, T>
 where
-    T: Allocate + Deallocate + Index + Unique,
+    T: Index + Unique,
 {
     type Item = Node<T>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.iter
-            .next()
-            .map(|(_, ptr)| Node::new(self.context, *ptr))
+        if self.inner.is_none() {
+            return None;
+        }
+        if let Some(borrow) = self.inner.take() {
+            if borrow.is_empty() {
+                return None;
+            }
+            let (begin, end) =
+                Ref::map_split(borrow, |slice| slice.split_at(1));
+            self.inner.replace(end);
+            let head = Ref::map(begin, |slice| &slice[0]);
+            return Some(Node::new(self.context, Rc::clone(&head)));
+        }
+        None
     }
 }
 
@@ -128,65 +144,17 @@ pub trait Unique {
 }
 
 pub trait Index {
-    // Consumes a `T` to produce a raw pointer..
-    fn insert(context: &mut Context, node: Self) -> *mut Self;
+    // Consumes a `T`,  attaches it to a `Context`, and returns a boxed reference.
+    fn insert(context: &mut Context, node: Self) -> NodeBox<Self>;
 
-    // Receives a raw pointer to produce an owned `Box<T>` for deallocation.
-    fn remove(context: &mut Context, ptr: *mut Self) -> Option<Box<Self>>;
+    // Receives a boxed `T`, removes it from a `Context`, and returns the boxed reference.
+    fn remove(context: &mut Context, ptr: NodeBox<Self>) -> NodeBox<Self>;
 
-    // Locates a node data as it was indexed and return a raw pointer.
-    fn search(context: &Context, uuid: &Uuid) -> Option<*mut Self>;
+    // Locates a `T` as it was indexed and returns the boxed reference.
+    fn search(context: &Context, uuid: &Uuid) -> Option<NodeBox<Self>>;
 
     // Determine if node is unrooted, i.e. has no parent node.
-    fn rooted(node: &Self) -> bool;
-}
-
-pub trait Allocate {
-    fn allocate(context: &mut Context, node: Self) -> Node<Self>
-    where
-        Self: Index,
-        Self: Unique,
-        Self: Sized;
-}
-
-impl<T> Allocate for T
-where
-    T: Index + Unique,
-{
-    fn allocate(context: &mut Context, node: Self) -> Node<T> {
-        let ptr = T::insert(context, node);
-        Node::new(context, ptr)
-    }
-}
-
-pub trait Deallocate {
-    fn deallocate(node: &mut Node<Self>)
-    where
-        Self: Index,
-        Self: Unique,
-        Self: Sized;
-}
-
-impl<T> Deallocate for T
-where
-    T: Index + Unique,
-{
-    fn deallocate(node: &mut Node<Self>) {
-        if !T::rooted(node) {
-            T::remove(&mut node.context, node.inner);
-        }
-        node.inner = std::ptr::null_mut();
-    }
-}
-
-impl<T> Drop for Node<T>
-where
-    T: Allocate + Deallocate + Index + Unique,
-{
-    fn drop(&mut self) {
-        assert!(!self.inner.is_null());
-        T::deallocate(self);
-    }
+    fn rooted(ptr: NodeBox<Self>) -> bool;
 }
 
 pub fn read<P: AsRef<Path>>(path: P) -> Result<(Context, Node<IR>)> {

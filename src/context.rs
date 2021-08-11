@@ -4,8 +4,8 @@ use crate::*;
 
 #[derive(Debug)]
 pub(crate) struct NodeIndex {
-    pub(crate) ir: HashMap<Uuid, *mut IR>,
-    pub(crate) modules: HashMap<Uuid, *mut Module>,
+    pub(crate) ir: HashMap<Uuid, NodeBox<IR>>,
+    pub(crate) modules: HashMap<Uuid, NodeBox<Module>>,
 }
 
 #[derive(Clone, Debug)]
@@ -24,26 +24,19 @@ impl Context {
         }
     }
 
-    // TODO: XXX: Allows multiple mutable references, e.g.:
-    //   let mut a = ir.modules_mut().nth(0).unwrap();
-    //   let mut b = ctx.find_node_mut::<Module>(&uuid).unwrap();
+    pub fn add_node<T>(&mut self, node: T) -> Node<T>
+    where
+        T: Index + Unique,
+    {
+        let boxed = T::insert(self, node);
+        Node::new(&self, boxed)
+    }
+
     pub fn find_node<T>(&self, uuid: &Uuid) -> Option<Node<T>>
     where
-        T: Allocate + Deallocate + Index + Unique,
+        T: Index + Unique,
     {
         T::search(self, uuid).map(|ptr| Node::new(&self, ptr))
-    }
-}
-
-impl Drop for Context {
-    fn drop(&mut self) {
-        if Rc::strong_count(&self.index) == 1 {
-            let ptrs: Vec<*mut IR> =
-                self.index.borrow().ir.values().map(|ptr| *ptr).collect();
-            for ptr in ptrs.into_iter() {
-                IR::remove(self, ptr);
-            }
-        }
     }
 }
 
@@ -76,22 +69,22 @@ mod tests {
     //     a_.set_name("bar");
     // }
 
-    #[test]
-    fn can_find_node_by_uuid() {
-        let mut ctx = Context::new();
-        let mut ir = IR::new(&mut ctx);
-        let module = Module::new(&mut ctx, "foo");
-        let uuid = module.uuid();
-        ir.add_module(module);
+    // #[test]
+    // fn can_find_node_by_uuid() {
+    //     let mut ctx = Context::new();
+    //     let mut ir = IR::new(&mut ctx);
+    //     let module = Module::new(&mut ctx, "foo");
+    //     let uuid = module.uuid();
+    //     ir.add_module(module);
 
-        let node = ctx.find_node::<Module>(&uuid);
-        assert!(node.is_some());
-        assert_eq!(uuid, node.unwrap().uuid());
+    //     let node = ctx.find_node::<Module>(&uuid);
+    //     assert!(node.is_some());
+    //     assert_eq!(uuid, node.unwrap().uuid());
 
-        let mut node = ctx.find_node::<Module>(&uuid).unwrap();
-        node.set_name("bar");
+    //     let mut node = ctx.find_node::<Module>(&uuid).unwrap();
+    //     node.set_name("bar");
 
-        let module = ir.modules().last().unwrap();
-        assert_eq!(module.name(), "bar");
-    }
+    //     let module = ir.modules().last().unwrap();
+    //     assert_eq!(module.name(), "bar");
+    // }
 }

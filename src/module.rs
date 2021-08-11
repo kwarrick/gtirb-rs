@@ -2,6 +2,8 @@ use anyhow::{anyhow, Result};
 
 use crate::*;
 
+pub use crate::Unique;
+
 #[derive(Debug, PartialEq)]
 pub struct Module {
     uuid: Uuid,
@@ -16,7 +18,7 @@ pub struct Module {
     // sections: Vec<Index>,
     // symbols: Vec<Index>,
     // proxy_blocks: Vec<Index>,
-    pub(crate) parent: Option<*mut IR>,
+    pub(crate) parent: Option<*const RefCell<IR>>,
 }
 
 impl Module {
@@ -33,7 +35,7 @@ impl Module {
             file_format: FileFormat::FormatUndefined,
             parent: None,
         };
-        Module::allocate(context, module)
+        context.add_node(module)
     }
 
     pub fn load_protobuf(
@@ -63,7 +65,7 @@ impl Module {
             // proxy_blocks: proxy_blocks,
             parent: None,
         };
-        let module = Module::allocate(context, module);
+        let module = context.add_node(module);
 
         // TODO:
         // Section::load_protobuf(context, m);
@@ -73,36 +75,39 @@ impl Module {
         Ok(module)
     }
 
-    pub fn name(&self) -> &str {
-        &self.name
+}
+
+impl Node<Module> {
+    pub fn name(&self) -> Ref<String> {
+        Ref::map(self.borrow(), |module| &module.name)
     }
 
     pub fn set_name<T: AsRef<str>>(&mut self, name: T) {
-        self.name = name.as_ref().to_owned();
+        self.borrow_mut().name = name.as_ref().to_owned();
     }
 
-    pub fn binary_path(&self) -> &str {
-        &self.binary_path
+    pub fn binary_path(&self) -> Ref<String> {
+        Ref::map(self.borrow(), |module| &module.binary_path)
     }
 
     pub fn set_binary_path<T: AsRef<str>>(&mut self, path: T) {
-        self.binary_path = path.as_ref().to_owned();
+        self.borrow_mut().binary_path = path.as_ref().to_owned();
     }
 
     pub fn file_format(&self) -> FileFormat {
-        self.file_format
+        self.borrow().file_format
     }
 
     pub fn set_file_format(&mut self, file_format: FileFormat) {
-        self.file_format = file_format;
+        self.borrow_mut().file_format = file_format;
     }
 
     pub fn isa(&self) -> ISA {
-        self.isa
+        self.borrow().isa
     }
 
     pub fn set_isa(&mut self, isa: ISA) {
-        self.isa = isa;
+        self.borrow_mut().isa = isa;
     }
 
     // pub fn entry_point(&self) -> Option<Node<CodeBlock>> {
@@ -116,31 +121,31 @@ impl Module {
     // }
 
     pub fn byte_order(&self) -> ByteOrder {
-        self.byte_order
+        self.borrow().byte_order
     }
 
     pub fn set_byte_order(&mut self, byte_order: ByteOrder) {
-        self.byte_order = byte_order;
+        self.borrow_mut().byte_order = byte_order;
     }
 
     pub fn preferred_address(&self) -> Addr {
-        self.preferred_address
+        self.borrow().preferred_address
     }
 
     pub fn set_preferred_address(&mut self, address: Addr) {
-        self.preferred_address = address;
+        self.borrow_mut().preferred_address = address;
     }
 
     pub fn rebase_delta(&self) -> i64 {
-        self.rebase_delta
+        self.borrow().rebase_delta
     }
 
     pub fn set_rebase_delta(&mut self, rebase_delta: i64) {
-        self.rebase_delta = rebase_delta;
+        self.borrow_mut().rebase_delta = rebase_delta;
     }
 
     pub fn is_relocated(&self) -> bool {
-        self.rebase_delta != 0
+        self.borrow().rebase_delta != 0
     }
 
     // pub fn sections(&self) -> Iter<Section> {
@@ -261,30 +266,45 @@ impl Unique for Module {
 
 impl Node<Module> {
     pub fn ir(&self) -> Option<Node<IR>> {
-        self.parent.map(|ptr| Node::new(&self.context, ptr))
+        self.inner
+            .borrow()
+            .parent
+            .map(|ptr| unsafe { Weak::from_raw(ptr) })
+            .map(|weak| weak.upgrade())
+            .flatten()
+            .map(|strong| Node::new(&self.context, strong))
     }
 }
 
 impl Index for Module {
-    fn insert(context: &mut Context, node: Self) -> *mut Self {
+    fn insert(context: &mut Context, node: Self) -> NodeBox<Self> {
         let uuid = node.uuid();
-        let ptr = Box::into_raw(Box::new(node));
-        context.index.borrow_mut().modules.insert(uuid, ptr);
+        let boxed = Rc::new(RefCell::new(node));
+        context
+            .index
+            .borrow_mut()
+            .modules
+            .insert(uuid, Rc::clone(&boxed));
+        boxed
+    }
+
+    fn remove(context: &mut Context, ptr: NodeBox<Self>) -> NodeBox<Self> {
+        let uuid = ptr.borrow().uuid();
+        context.index.borrow_mut().modules.remove(&uuid);
         ptr
     }
 
-    fn remove(context: &mut Context, ptr: *mut Self) -> Option<Box<Self>> {
-        let module = unsafe { Box::from_raw(ptr) };
-        context.index.borrow_mut().modules.remove(&module.uuid);
-        Some(module)
+    fn search(context: &Context, uuid: &Uuid) -> Option<NodeBox<Self>> {
+        context
+            .index
+            .borrow()
+            .modules
+            .get(uuid)
+            .map(|ptr| Rc::clone(&ptr))
     }
 
-    fn search(context: &Context, uuid: &Uuid) -> Option<*mut Self> {
-        context.index.borrow().modules.get(uuid).map(|ptr| *ptr)
-    }
-
-    fn rooted(node: &Self) -> bool {
-        node.parent.is_some()
+    fn rooted(ptr: NodeBox<Self>) -> bool {
+        ptr.borrow().parent.is_some()
     }
 }
 
@@ -317,7 +337,7 @@ mod tests {
         let path = "/home/gt/irb/foo";
         let mut module = ir.add_module(Module::new(&mut ctx, "dummy"));
         module.set_binary_path(path);
-        assert_eq!(module.binary_path(), path);
+        assert_eq!(*module.binary_path(), path);
     }
 
     #[test]
@@ -346,7 +366,7 @@ mod tests {
         let mut ir = IR::new(&mut ctx);
         let mut module = ir.add_module(Module::new(&mut ctx, "dummy"));
         module.set_name("example");
-        assert_eq!(module.name(), "example");
+        assert_eq!(*module.name(), "example");
     }
 
     #[test]
