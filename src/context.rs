@@ -6,6 +6,7 @@ use crate::*;
 pub(crate) struct NodeIndex {
     pub(crate) ir: HashMap<Uuid, NodeBox<IR>>,
     pub(crate) modules: HashMap<Uuid, NodeBox<Module>>,
+    pub(crate) symbols: HashMap<Uuid, NodeBox<Symbol>>,
     pub(crate) sections: HashMap<Uuid, NodeBox<Section>>,
 }
 
@@ -19,6 +20,7 @@ impl Context {
         let index = NodeIndex {
             ir: HashMap::new(),
             modules: HashMap::new(),
+            symbols: HashMap::new(),
             sections: HashMap::new(),
         };
         Context {

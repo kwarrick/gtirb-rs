@@ -16,7 +16,7 @@ pub struct Module {
     preferred_address: Addr,
     file_format: FileFormat,
     sections: Vec<NodeBox<Section>>,
-    // symbols: Vec<Index>,
+    symbols: Vec<NodeBox<Symbol>>,
     // proxy_blocks: Vec<Index>,
     pub(crate) parent: Option<*const RefCell<IR>>,
 }
@@ -34,6 +34,7 @@ impl Module {
             preferred_address: Addr(0),
             file_format: FileFormat::FormatUndefined,
             sections: Vec::new(),
+            symbols: Vec::new(),
             parent: None,
         };
         context.add_node(module)
@@ -62,7 +63,7 @@ impl Module {
             preferred_address: Addr(message.preferred_addr),
             file_format: format,
             sections: Vec::new(),
-            // symbols: symbols,
+            symbols: Vec::new(),
             // proxy_blocks: proxy_blocks,
             parent: None,
         };
@@ -75,8 +76,13 @@ impl Module {
             module.add_section(section);
         }
 
+        // Load Symbol protobuf messages.
+        for m in message.symbols.into_iter() {
+            let symbol = Symbol::load_protobuf(context, m)?;
+            module.add_symbol(symbol);
+        }
+
         // TODO:
-        // Symbol::load_protobuf(context, m);
         // ProxyBlock::load_protobuf(context, m);
 
         Ok(module)
@@ -154,6 +160,35 @@ impl Node<Module> {
         self.borrow().rebase_delta != 0
     }
 
+    pub fn symbols(&self) -> Iter<Symbol> {
+        Iter {
+            inner: Some(Ref::map(self.borrow(), |module| &module.symbols[..])),
+            context: &self.context,
+        }
+    }
+
+    pub fn add_symbol(&mut self, symbol: Node<Symbol>) -> Node<Symbol> {
+        let ptr = Weak::into_raw(Rc::downgrade(&Rc::clone(&self.inner)));
+        symbol.inner.borrow_mut().parent = Some(ptr);
+        self.borrow_mut().symbols.push(Rc::clone(&symbol.inner));
+        symbol
+    }
+
+    pub fn remove_symbol(&self, uuid: Uuid) -> Option<Node<Symbol>> {
+        let mut module = self.inner.borrow_mut();
+        if let Some(pos) = module
+            .symbols
+            .iter()
+            .position(|m| m.borrow().uuid() == uuid)
+        {
+            let ptr = module.symbols.remove(pos);
+            ptr.borrow_mut().parent = None;
+            Some(Node::new(&self.context, ptr))
+        } else {
+            None
+        }
+    }
+
     pub fn add_section(&mut self, section: Node<Section>) -> Node<Section> {
         let ptr = Weak::into_raw(Rc::downgrade(&Rc::clone(&self.inner)));
         section.inner.borrow_mut().parent = Some(ptr);
@@ -192,18 +227,6 @@ impl Node<Module> {
     // }
 
     // pub fn remove_proxy_block(&self, node: Node<ProxyBlock>) {
-    //     self.remove_node(node);
-    // }
-
-    // pub fn symbols(&self) -> NodeIterator<Symbol> {
-    //     self.node_iter()
-    // }
-
-    // pub fn add_symbol(&self, symbol: Symbol) -> Node<Symbol> {
-    //     self.add_node(symbol)
-    // }
-
-    // pub fn remove_symbol(&self, node: Node<Symbol>) {
     //     self.remove_node(node);
     // }
 

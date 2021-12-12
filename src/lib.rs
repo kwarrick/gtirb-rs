@@ -41,8 +41,8 @@ use section::Section;
 // mod proxy_block;
 // use proxy_block::ProxyBlock;
 
-// mod symbol;
-// use symbol::Symbol;
+mod symbol;
+use symbol::Symbol;
 
 // mod symbolic_expression;
 // use symbolic_expression::SymbolicExpression;

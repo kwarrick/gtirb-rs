@@ -10,26 +10,26 @@ pub enum Payload {
 
 #[derive(Debug, Default, PartialEq)]
 pub struct Symbol {
-    pub(crate) parent: Option<Index>,
-
     uuid: Uuid,
     name: String,
     payload: Option<Payload>,
+    pub(crate) parent: Option<*const RefCell<Module>>,
 }
 
 impl Symbol {
-    pub fn new(name: &str) -> Self {
-        Symbol {
+    pub fn new(context: &mut Context, name: &str) -> Node<Symbol> {
+        let symbol = Symbol {
             uuid: Uuid::new_v4(),
             name: name.to_owned(),
             ..Default::default()
-        }
+        };
+        context.add_node(symbol)
     }
 
     pub(crate) fn load_protobuf(
-        context: Rc<RefCell<Context>>,
+        context: &mut Context,
         message: proto::Symbol,
-    ) -> Result<Index> {
+    ) -> Result<Node<Symbol>> {
         use crate::proto::symbol::OptionalPayload;
 
         let payload = match message.optional_payload {
@@ -48,7 +48,9 @@ impl Symbol {
             payload: payload,
         };
 
-        Ok(context.borrow_mut().symbol.insert(symbol))
+        let symbol = context.add_node(symbol);
+
+        Ok(symbol)
     }
 }
 
@@ -64,22 +66,34 @@ impl Unique for Symbol {
 
 impl Node<Symbol> {}
 
-impl Indexed<Symbol> for Node<Symbol> {
-    fn arena(&self) -> Ref<Arena<Symbol>> {
-        Ref::map(self.context.borrow(), |ctx| &ctx.symbol)
+impl Index for Symbol {
+    fn insert(context: &mut Context, node: Self) -> NodeBox<Self> {
+        let uuid = node.uuid();
+        let boxed = Rc::new(RefCell::new(node));
+        context
+            .index
+            .borrow_mut()
+            .symbols
+            .insert(uuid, Rc::clone(&boxed));
+        boxed
     }
 
-    fn arena_mut(&self) -> RefMut<Arena<Symbol>> {
-        RefMut::map(self.context.borrow_mut(), |ctx| &mut ctx.symbol)
-    }
-}
-
-impl Child<Module> for Node<Symbol> {
-    fn parent(&self) -> (Option<Index>, PhantomData<Module>) {
-        (self.borrow().parent, PhantomData)
+    fn remove(context: &mut Context, ptr: NodeBox<Self>) -> NodeBox<Self> {
+        let uuid = ptr.borrow().uuid();
+        context.index.borrow_mut().symbols.remove(&uuid);
+        ptr
     }
 
-    fn set_parent(&self, (index, _): (Index, PhantomData<Module>)) {
-        self.borrow_mut().parent.replace(index);
+    fn search(context: &Context, uuid: &Uuid) -> Option<NodeBox<Self>> {
+        context
+            .index
+            .borrow()
+            .symbols
+            .get(uuid)
+            .map(|ptr| Rc::clone(&ptr))
+    }
+
+    fn rooted(ptr: NodeBox<Self>) -> bool {
+        ptr.borrow().parent.is_some()
     }
 }
