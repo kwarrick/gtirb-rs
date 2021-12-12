@@ -6,28 +6,27 @@ use crate::*;
 
 #[derive(Default, Debug, PartialEq)]
 pub struct Section {
-    pub(crate) parent: Option<Index>,
-
     uuid: Uuid,
     name: String,
     flags: HashSet<SectionFlag>,
-    byte_intervals: Vec<Index>,
+    // byte_intervals: Vec<Index>,
+    pub(crate) parent: Option<*const RefCell<Module>>,
 }
 
 impl Section {
-    pub fn new(name: &str) -> Self {
-        Section {
+    pub fn new(context: &mut Context, name: &str) -> Node<Section> {
+        let section = Section {
             uuid: Uuid::new_v4(),
             name: name.to_owned(),
             ..Default::default()
-        }
+        };
+        context.add_node(section)
     }
 
     pub(crate) fn load_protobuf(
-        context: Rc<RefCell<Context>>,
+        context: &mut Context,
         message: proto::Section,
-    ) -> Result<Index> {
-
+    ) -> Result<Node<Section>> {
         let section_flags: Result<HashSet<SectionFlag>> = message
             .section_flags
             .into_iter()
@@ -36,11 +35,12 @@ impl Section {
             })
             .collect();
 
-        let byte_intervals = message
-            .byte_intervals
-            .into_iter()
-            .map(|m| ByteInterval::load_protobuf(context.clone(), m))
-            .collect::<Result<Vec<Index>>>()?;
+        // TODO:
+        // let byte_intervals = message
+        //     .byte_intervals
+        //     .into_iter()
+        //     .map(|m| ByteInterval::load_protobuf(context.clone(), m))
+        //     .collect::<Result<Vec<Index>>>()?;
 
         let section = Section {
             parent: None,
@@ -48,10 +48,12 @@ impl Section {
             uuid: crate::util::parse_uuid(&message.uuid)?,
             name: message.name,
             flags: section_flags?,
-            byte_intervals: byte_intervals,
+            // byte_intervals: byte_intervals,
         };
 
-        Ok(context.borrow_mut().section.insert(section))
+        let section = context.add_node(section);
+
+        Ok(section)
     }
 }
 
@@ -70,7 +72,7 @@ impl Node<Section> {
         self.borrow().name.to_owned()
     }
 
-    pub fn set_name<T: AsRef<str>>(&self, name: T) {
+    pub fn set_name<T: AsRef<str>>(&mut self, name: T) {
         self.borrow_mut().name = name.as_ref().to_owned();
     }
 
@@ -78,11 +80,11 @@ impl Node<Section> {
         self.borrow().flags.clone()
     }
 
-    pub fn add_flag(&self, flag: SectionFlag) {
+    pub fn add_flag(&mut self, flag: SectionFlag) {
         self.borrow_mut().flags.insert(flag);
     }
 
-    pub fn remove_flag(&self, flag: SectionFlag) {
+    pub fn remove_flag(&mut self, flag: SectionFlag) {
         self.borrow_mut().flags.remove(&flag);
     }
 
@@ -91,100 +93,99 @@ impl Node<Section> {
     }
 
     pub fn size(&self) -> Option<u64> {
-        let min: Option<Addr> =
-            self.byte_intervals().map(|i| i.address()).min().flatten();
-        let max: Option<Addr> = self
-            .byte_intervals()
-            .map(|i| i.address().map(|a| a + i.size().into()))
-            .max()
-            .flatten();
-        if let (Some(min), Some(max)) = (min, max) {
-            Some(u64::from(max - min))
-        } else {
-            None
-        }
+        // TODO:
+        // let min: Option<Addr> =
+        //     self.byte_intervals().map(|i| i.address()).min().flatten();
+        // let max: Option<Addr> = self
+        //     .byte_intervals()
+        //     .map(|i| i.address().map(|a| a + i.size().into()))
+        //     .max()
+        //     .flatten();
+        // if let (Some(min), Some(max)) = (min, max) {
+        //     Some(u64::from(max - min))
+        // } else {
+        //     None
+        // }
+        None
     }
 
     pub fn address(&self) -> Option<Addr> {
-        self.byte_intervals().map(|i| i.address()).min().flatten()
+        // TODO:
+        // self.byte_intervals().map(|i| i.address()).min().flatten()
+        None
     }
 
-    pub fn byte_intervals(&self) -> NodeIterator<ByteInterval> {
-        self.node_iter()
-    }
+    // pub fn byte_intervals(&self) -> NodeIterator<ByteInterval> {
+    //     self.node_iter()
+    // }
 
-    pub fn add_byte_interval(
-        &self,
-        byte_interval: ByteInterval,
-    ) -> Node<ByteInterval> {
-        self.add_node(byte_interval)
-    }
+    // pub fn add_byte_interval(
+    //     &self,
+    //     byte_interval: ByteInterval,
+    // ) -> Node<ByteInterval> {
+    //     self.add_node(byte_interval)
+    // }
 
-    pub fn remove_byte_interval(&self, node: Node<ByteInterval>) {
-        self.remove_node(node);
-    }
+    // pub fn remove_byte_interval(&self, node: Node<ByteInterval>) {
+    //     self.remove_node(node);
+    // }
 
-    pub fn code_blocks(&self) -> NodeIterator<CodeBlock> {
-        let iter = self.byte_intervals().flat_map(|interval| {
-            <Node<ByteInterval> as Parent<CodeBlock>>::nodes(&interval)
-                .clone()
-                .into_iter()
-        });
-        NodeIterator {
-            iter: Box::new(iter),
-            context: self.context.clone(),
-            kind: PhantomData,
-        }
-    }
+    // pub fn code_blocks(&self) -> NodeIterator<CodeBlock> {
+    //     let iter = self.byte_intervals().flat_map(|interval| {
+    //         <Node<ByteInterval> as Parent<CodeBlock>>::nodes(&interval)
+    //             .clone()
+    //             .into_iter()
+    //     });
+    //     NodeIterator {
+    //         iter: Box::new(iter),
+    //         context: self.context.clone(),
+    //         kind: PhantomData,
+    //     }
+    // }
 
-    pub fn data_blocks(&self) -> NodeIterator<DataBlock> {
-        let iter = self.byte_intervals().flat_map(|interval| {
-            <Node<ByteInterval> as Parent<DataBlock>>::nodes(&interval)
-                .clone()
-                .into_iter()
-        });
-        NodeIterator {
-            iter: Box::new(iter),
-            context: self.context.clone(),
-            kind: PhantomData,
-        }
-    }
+    // pub fn data_blocks(&self) -> NodeIterator<DataBlock> {
+    //     let iter = self.byte_intervals().flat_map(|interval| {
+    //         <Node<ByteInterval> as Parent<DataBlock>>::nodes(&interval)
+    //             .clone()
+    //             .into_iter()
+    //     });
+    //     NodeIterator {
+    //         iter: Box::new(iter),
+    //         context: self.context.clone(),
+    //         kind: PhantomData,
+    //     }
+    // }
 }
 
-impl Indexed<Section> for Node<Section> {
-    fn arena(&self) -> Ref<Arena<Section>> {
-        Ref::map(self.context.borrow(), |ctx| &ctx.section)
+impl Index for Section {
+    fn insert(context: &mut Context, node: Self) -> NodeBox<Self> {
+        let uuid = node.uuid();
+        let boxed = Rc::new(RefCell::new(node));
+        context
+            .index
+            .borrow_mut()
+            .sections
+            .insert(uuid, Rc::clone(&boxed));
+        boxed
     }
 
-    fn arena_mut(&self) -> RefMut<Arena<Section>> {
-        RefMut::map(self.context.borrow_mut(), |ctx| &mut ctx.section)
-    }
-}
-
-impl Child<Module> for Node<Section> {
-    fn parent(&self) -> (Option<Index>, PhantomData<Module>) {
-        (self.borrow().parent, PhantomData)
+    fn remove(context: &mut Context, ptr: NodeBox<Self>) -> NodeBox<Self> {
+        let uuid = ptr.borrow().uuid();
+        context.index.borrow_mut().modules.remove(&uuid);
+        ptr
     }
 
-    fn set_parent(&self, (index, _): (Index, PhantomData<Module>)) {
-        self.borrow_mut().parent.replace(index);
-    }
-}
-
-impl Parent<ByteInterval> for Node<Section> {
-    fn nodes(&self) -> Ref<Vec<Index>> {
-        Ref::map(self.borrow(), |section| &section.byte_intervals)
-    }
-
-    fn nodes_mut(&self) -> RefMut<Vec<Index>> {
-        RefMut::map(self.borrow_mut(), |section| &mut section.byte_intervals)
+    fn search(context: &Context, uuid: &Uuid) -> Option<NodeBox<Self>> {
+        context
+            .index
+            .borrow()
+            .sections
+            .get(uuid)
+            .map(|ptr| Rc::clone(&ptr))
     }
 
-    fn node_arena(&self) -> Ref<Arena<ByteInterval>> {
-        Ref::map(self.context.borrow(), |ctx| &ctx.byte_interval)
-    }
-    fn node_arena_mut(&self) -> RefMut<Arena<ByteInterval>> {
-        RefMut::map(self.context.borrow_mut(), |ctx| &mut ctx.byte_interval)
+    fn rooted(ptr: NodeBox<Self>) -> bool {
+        ptr.borrow().parent.is_some()
     }
 }
 

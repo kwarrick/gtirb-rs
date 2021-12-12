@@ -26,8 +26,8 @@ pub use ir::IR;
 mod module;
 pub use module::Module;
 
-// mod section;
-// use section::Section;
+mod section;
+use section::Section;
 
 // mod byte_interval;
 // use byte_interval::ByteInterval;
@@ -90,7 +90,7 @@ where
 
 impl<T> Drop for Node<T>
 where
-    T: Index + Unique
+    T: Index + Unique,
 {
     fn drop(&mut self) {
         if !T::rooted(Rc::clone(&self.inner)) {

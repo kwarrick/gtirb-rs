@@ -15,7 +15,7 @@ pub struct Module {
     rebase_delta: i64,
     preferred_address: Addr,
     file_format: FileFormat,
-    // sections: Vec<Index>,
+    sections: Vec<NodeBox<Section>>,
     // symbols: Vec<Index>,
     // proxy_blocks: Vec<Index>,
     pub(crate) parent: Option<*const RefCell<IR>>,
@@ -33,6 +33,7 @@ impl Module {
             rebase_delta: 0,
             preferred_address: Addr(0),
             file_format: FileFormat::FormatUndefined,
+            sections: Vec::new(),
             parent: None,
         };
         context.add_node(module)
@@ -60,21 +61,26 @@ impl Module {
             rebase_delta: message.rebase_delta,
             preferred_address: Addr(message.preferred_addr),
             file_format: format,
-            // sections: sections,
+            sections: Vec::new(),
             // symbols: symbols,
             // proxy_blocks: proxy_blocks,
             parent: None,
         };
-        let module = context.add_node(module);
+
+        let mut module = context.add_node(module);
+
+        // Load Section protobuf messages.
+        for m in message.sections.into_iter() {
+            let section = Section::load_protobuf(context, m)?;
+            module.add_section(section);
+        }
 
         // TODO:
-        // Section::load_protobuf(context, m);
         // Symbol::load_protobuf(context, m);
         // ProxyBlock::load_protobuf(context, m);
 
         Ok(module)
     }
-
 }
 
 impl Node<Module> {
@@ -148,17 +154,34 @@ impl Node<Module> {
         self.borrow().rebase_delta != 0
     }
 
-    // pub fn sections(&self) -> Iter<Section> {
-    //     self.sections.iter()
-    // }
+    pub fn add_section(&mut self, section: Node<Section>) -> Node<Section> {
+        let ptr = Weak::into_raw(Rc::downgrade(&Rc::clone(&self.inner)));
+        section.inner.borrow_mut().parent = Some(ptr);
+        self.borrow_mut().sections.push(Rc::clone(&section.inner));
+        section
+    }
 
-    // pub fn add_section(&self, section: Section) -> Node<Section> {
-    //     self.add_node(section)
-    // }
+    pub fn remove_section(&mut self, uuid: Uuid) -> Option<Node<Section>> {
+        let mut module = self.inner.borrow_mut();
+        if let Some(pos) = module
+            .sections
+            .iter()
+            .position(|m| m.borrow().uuid() == uuid)
+        {
+            let ptr = module.sections.remove(pos);
+            ptr.borrow_mut().parent = None;
+            Some(Node::new(&self.context, ptr))
+        } else {
+            None
+        }
+    }
 
-    // pub fn remove_section(&self, node: Node<Section>) {
-    //     self.remove_node(node);
-    // }
+    pub fn sections<'a>(&'a self) -> Iter<Section> {
+        Iter {
+            inner: Some(Ref::map(self.borrow(), |module| &module.sections[..])),
+            context: &self.context,
+        }
+    }
 
     // pub fn proxy_blocks(&self) -> NodeIterator<ProxyBlock> {
     //     self.node_iter()
