@@ -32,11 +32,11 @@ use section::Section;
 mod byte_interval;
 use byte_interval::ByteInterval;
 
-// mod code_block;
-// use code_block::CodeBlock;
+mod code_block;
+use code_block::CodeBlock;
 
-// mod data_block;
-// use data_block::DataBlock;
+mod data_block;
+use data_block::DataBlock;
 
 mod proxy_block;
 use proxy_block::ProxyBlock;
@@ -44,8 +44,8 @@ use proxy_block::ProxyBlock;
 mod symbol;
 use symbol::Symbol;
 
-// mod symbolic_expression;
-// use symbolic_expression::SymbolicExpression;
+mod symbolic_expression;
+use symbolic_expression::SymbolicExpression;
 
 mod util;
 

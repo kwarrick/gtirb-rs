@@ -2,9 +2,8 @@ use crate::*;
 
 #[derive(Default, Debug, PartialEq)]
 pub struct DataBlock {
-    pub(crate) parent: Option<Index>,
-
     uuid: Uuid,
+    pub(crate) parent: Option<*const RefCell<ByteInterval>>,
 }
 
 impl DataBlock {
@@ -28,22 +27,34 @@ impl Unique for DataBlock {
 
 impl Node<DataBlock> {}
 
-impl Indexed<DataBlock> for Node<DataBlock> {
-    fn arena(&self) -> Ref<Arena<DataBlock>> {
-        Ref::map(self.context.borrow(), |ctx| &ctx.data_block)
+impl Index for DataBlock {
+    fn insert(context: &mut Context, node: Self) -> NodeBox<Self> {
+        let uuid = node.uuid();
+        let boxed = Rc::new(RefCell::new(node));
+        context
+            .index
+            .borrow_mut()
+            .data_blocks
+            .insert(uuid, Rc::clone(&boxed));
+        boxed
     }
 
-    fn arena_mut(&self) -> RefMut<Arena<DataBlock>> {
-        RefMut::map(self.context.borrow_mut(), |ctx| &mut ctx.data_block)
-    }
-}
-
-impl Child<ByteInterval> for Node<DataBlock> {
-    fn parent(&self) -> (Option<Index>, PhantomData<ByteInterval>) {
-        (self.borrow().parent, PhantomData)
+    fn remove(context: &mut Context, ptr: NodeBox<Self>) -> NodeBox<Self> {
+        let uuid = ptr.borrow().uuid();
+        context.index.borrow_mut().data_blocks.remove(&uuid);
+        ptr
     }
 
-    fn set_parent(&self, (index, _): (Index, PhantomData<ByteInterval>)) {
-        self.borrow_mut().parent.replace(index);
+    fn search(context: &Context, uuid: &Uuid) -> Option<NodeBox<Self>> {
+        context
+            .index
+            .borrow()
+            .data_blocks
+            .get(uuid)
+            .map(|ptr| Rc::clone(&ptr))
+    }
+
+    fn rooted(ptr: NodeBox<Self>) -> bool {
+        ptr.borrow().parent.is_some()
     }
 }

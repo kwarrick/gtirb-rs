@@ -2,14 +2,16 @@ use std::collections::HashMap;
 
 use crate::*;
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub(crate) struct NodeIndex {
     pub(crate) ir: HashMap<Uuid, NodeBox<IR>>,
     pub(crate) modules: HashMap<Uuid, NodeBox<Module>>,
     pub(crate) symbols: HashMap<Uuid, NodeBox<Symbol>>,
     pub(crate) sections: HashMap<Uuid, NodeBox<Section>>,
-    pub(crate) proxy_blocks: HashMap<Uuid, NodeBox<ProxyBlock>>,
     pub(crate) byte_intervals: HashMap<Uuid, NodeBox<ByteInterval>>,
+    pub(crate) code_blocks: HashMap<Uuid, NodeBox<CodeBlock>>,
+    pub(crate) data_blocks: HashMap<Uuid, NodeBox<DataBlock>>,
+    pub(crate) proxy_blocks: HashMap<Uuid, NodeBox<ProxyBlock>>,
 }
 
 #[derive(Clone, Debug)]
@@ -20,12 +22,7 @@ pub struct Context {
 impl Context {
     pub fn new() -> Self {
         let index = NodeIndex {
-            ir: HashMap::new(),
-            modules: HashMap::new(),
-            symbols: HashMap::new(),
-            sections: HashMap::new(),
-            proxy_blocks: HashMap::new(),
-            byte_intervals: HashMap::new(),
+            ..Default::default()
         };
         Context {
             index: Rc::new(RefCell::new(index)),

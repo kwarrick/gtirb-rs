@@ -462,7 +462,7 @@ mod tests {
         let mut ctx = Context::new();
         let mut ir = IR::new(&mut ctx);
         let mut module = ir.add_module(Module::new(&mut ctx, "dummy"));
-        let section = module.add_section(Section::new(&mut ctx, "foo"));
+        module.add_section(Section::new(&mut ctx, "foo"));
         assert_eq!(module.sections().count(), 1);
     }
 

@@ -10,9 +10,9 @@ pub struct ByteInterval {
     size: u64,
     address: Option<Addr>,
     bytes: Vec<u8>,
-    // code_blocks: Vec<Index>,
-    // data_blocks: Vec<Index>,
-    // symbolic_expressions: HashMap<u64, SymbolicExpression>,
+    code_blocks: Vec<NodeBox<CodeBlock>>,
+    data_blocks: Vec<NodeBox<DataBlock>>,
+    symbolic_expressions: HashMap<u64, SymbolicExpression>,
     pub(crate) parent: Option<*const RefCell<Section>>,
 }
 
@@ -30,15 +30,14 @@ impl ByteInterval {
         message: proto::ByteInterval,
     ) -> Result<Node<ByteInterval>> {
         let byte_interval = ByteInterval {
-            parent: None,
-
             uuid: crate::util::parse_uuid(&message.uuid)?,
             size: message.size,
             address: message.has_address.then(|| Addr(message.address)),
             bytes: message.contents,
-            // code_blocks: Vec::new(), // TODO
-            // data_blocks: Vec::new(), // TODO
-            // symbolic_expressions: HashMap::new(), // TODO
+            code_blocks: Vec::new(),
+            data_blocks: Vec::new(),
+            symbolic_expressions: HashMap::new(),
+            parent: None,
         };
 
         let byte_interval = context.add_node(byte_interval);
@@ -93,29 +92,77 @@ impl Node<ByteInterval> {
         self.borrow_mut().bytes = bytes.as_ref().to_vec();
     }
 
-    // pub fn code_blocks(&self) -> NodeIterator<CodeBlock> {
-    //     self.node_iter()
-    // }
+    pub fn add_code_block(
+        &mut self,
+        code_block: Node<CodeBlock>,
+    ) -> Node<CodeBlock> {
+        let ptr = Weak::into_raw(Rc::downgrade(&Rc::clone(&self.inner)));
+        code_block.inner.borrow_mut().parent = Some(ptr);
+        self.borrow_mut()
+            .code_blocks
+            .push(Rc::clone(&code_block.inner));
+        code_block
+    }
 
-    // pub fn add_code_block(&self, code_block: CodeBlock) -> Node<CodeBlock> {
-    //     self.add_node(code_block)
-    // }
+    pub fn remove_code_block(&self, uuid: Uuid) -> Option<Node<CodeBlock>> {
+        let mut byte_interval = self.inner.borrow_mut();
+        if let Some(pos) = byte_interval
+            .code_blocks
+            .iter()
+            .position(|m| m.borrow().uuid() == uuid)
+        {
+            let ptr = byte_interval.code_blocks.remove(pos);
+            ptr.borrow_mut().parent = None;
+            Some(Node::new(&self.context, ptr))
+        } else {
+            None
+        }
+    }
 
-    // pub fn remove_code_block(&self, node: Node<CodeBlock>) {
-    //     self.remove_node(node);
-    // }
+    pub fn code_blocks(&self) -> Iter<CodeBlock> {
+        Iter {
+            inner: Some(Ref::map(self.borrow(), |section| {
+                &section.code_blocks[..]
+            })),
+            context: &self.context,
+        }
+    }
 
-    // pub fn data_blocks(&self) -> NodeIterator<DataBlock> {
-    //     self.node_iter()
-    // }
+    pub fn data_blocks(&self) -> Iter<DataBlock> {
+        Iter {
+            inner: Some(Ref::map(self.borrow(), |section| {
+                &section.data_blocks[..]
+            })),
+            context: &self.context,
+        }
+    }
 
-    // pub fn add_data_block(&self, data_block: DataBlock) -> Node<DataBlock> {
-    //     self.add_node(data_block)
-    // }
+    pub fn add_data_block(
+        &mut self,
+        data_block: Node<DataBlock>,
+    ) -> Node<DataBlock> {
+        let ptr = Weak::into_raw(Rc::downgrade(&Rc::clone(&self.inner)));
+        data_block.inner.borrow_mut().parent = Some(ptr);
+        self.borrow_mut()
+            .data_blocks
+            .push(Rc::clone(&data_block.inner));
+        data_block
+    }
 
-    // pub fn remove_data_block(&self, node: Node<DataBlock>) {
-    //     self.remove_node(node);
-    // }
+    pub fn remove_data_block(&self, uuid: Uuid) -> Option<Node<DataBlock>> {
+        let mut byte_interval = self.inner.borrow_mut();
+        if let Some(pos) = byte_interval
+            .data_blocks
+            .iter()
+            .position(|m| m.borrow().uuid() == uuid)
+        {
+            let ptr = byte_interval.data_blocks.remove(pos);
+            ptr.borrow_mut().parent = None;
+            Some(Node::new(&self.context, ptr))
+        } else {
+            None
+        }
+    }
 }
 
 impl Index for ByteInterval {

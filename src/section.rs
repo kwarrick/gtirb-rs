@@ -44,7 +44,13 @@ impl Section {
             byte_intervals: Vec::new(),
         };
 
-        let section = context.add_node(section);
+        let mut section = context.add_node(section);
+
+        // Load ByteInterval protobuf messages.
+        for m in message.byte_intervals.into_iter() {
+            let byte_interval = ByteInterval::load_protobuf(context, m)?;
+            section.add_byte_interval(byte_interval);
+        }
 
         Ok(section)
     }
@@ -86,26 +92,22 @@ impl Node<Section> {
     }
 
     pub fn size(&self) -> Option<u64> {
-        // TODO:
-        // let min: Option<Addr> =
-        //     self.byte_intervals().map(|i| i.address()).min().flatten();
-        // let max: Option<Addr> = self
-        //     .byte_intervals()
-        //     .map(|i| i.address().map(|a| a + i.size().into()))
-        //     .max()
-        //     .flatten();
-        // if let (Some(min), Some(max)) = (min, max) {
-        //     Some(u64::from(max - min))
-        // } else {
-        //     None
-        // }
-        None
+        let min: Option<Addr> =
+            self.byte_intervals().map(|i| i.address()).min().flatten();
+        let max: Option<Addr> = self
+            .byte_intervals()
+            .map(|i| i.address().map(|a| a + i.size().into()))
+            .max()
+            .flatten();
+        if let (Some(min), Some(max)) = (min, max) {
+            Some(u64::from(max - min))
+        } else {
+            None
+        }
     }
 
     pub fn address(&self) -> Option<Addr> {
-        // TODO:
-        // self.byte_intervals().map(|i| i.address()).min().flatten()
-        None
+        self.byte_intervals().map(|i| i.address()).min().flatten()
     }
 
     pub fn add_byte_interval(
@@ -240,30 +242,32 @@ mod tests {
         assert!(!section.is_flag_set(SectionFlag::Writable));
     }
 
-    // TODO:
-    // #[test]
-    // fn can_calculate_size() {
-    //     let ir = IR::new();
-    //     let module = ir.add_module(Module::new("dummy"));
+    #[test]
+    fn can_calculate_size() {
+        let mut ctx = Context::new();
+        let mut ir = IR::new(&mut ctx);
+        let mut module = ir.add_module(Module::new(&mut ctx, "dummy"));
 
-    //     let section = module.add_section(Section::new(".text"));
-    //     assert_eq!(section.size(), None);
-    //     assert_eq!(section.address(), None);
+        let mut section = module.add_section(Section::new(&mut ctx, ".text"));
+        assert_eq!(section.size(), None);
+        assert_eq!(section.address(), None);
 
-    //     let byte_interval = section.add_byte_interval(ByteInterval::new());
-    //     byte_interval.set_address(Some(Addr(5)));
-    //     byte_interval.set_size(10);
-    //     assert_eq!(section.size(), Some(10));
-    //     assert_eq!(section.address(), Some(Addr(5)));
+        let mut byte_interval =
+            section.add_byte_interval(ByteInterval::new(&mut ctx));
+        byte_interval.set_address(Some(Addr(5)));
+        byte_interval.set_size(10);
+        assert_eq!(section.size(), Some(10));
+        assert_eq!(section.address(), Some(Addr(5)));
 
-    //     let byte_interval = section.add_byte_interval(ByteInterval::new());
-    //     byte_interval.set_address(Some(Addr(15)));
-    //     byte_interval.set_size(10);
-    //     assert_eq!(section.size(), Some(20));
-    //     assert_eq!(section.address(), Some(Addr(5)));
+        let mut byte_interval =
+            section.add_byte_interval(ByteInterval::new(&mut ctx));
+        byte_interval.set_address(Some(Addr(15)));
+        byte_interval.set_size(10);
+        assert_eq!(section.size(), Some(20));
+        assert_eq!(section.address(), Some(Addr(5)));
 
-    //     section.add_byte_interval(ByteInterval::new());
-    //     assert_eq!(section.size(), None);
-    //     assert_eq!(section.address(), None);
-    // }
+        section.add_byte_interval(ByteInterval::new(&mut ctx));
+        assert_eq!(section.size(), None);
+        assert_eq!(section.address(), None);
+    }
 }
