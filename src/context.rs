@@ -9,6 +9,7 @@ pub(crate) struct NodeIndex {
     pub(crate) symbols: HashMap<Uuid, NodeBox<Symbol>>,
     pub(crate) sections: HashMap<Uuid, NodeBox<Section>>,
     pub(crate) proxy_blocks: HashMap<Uuid, NodeBox<ProxyBlock>>,
+    pub(crate) byte_intervals: HashMap<Uuid, NodeBox<ByteInterval>>,
 }
 
 #[derive(Clone, Debug)]
@@ -24,6 +25,7 @@ impl Context {
             symbols: HashMap::new(),
             sections: HashMap::new(),
             proxy_blocks: HashMap::new(),
+            byte_intervals: HashMap::new(),
         };
         Context {
             index: Rc::new(RefCell::new(index)),

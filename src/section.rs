@@ -9,7 +9,7 @@ pub struct Section {
     uuid: Uuid,
     name: String,
     flags: HashSet<SectionFlag>,
-    // byte_intervals: Vec<Index>,
+    byte_intervals: Vec<NodeBox<ByteInterval>>,
     pub(crate) parent: Option<*const RefCell<Module>>,
 }
 
@@ -35,20 +35,13 @@ impl Section {
             })
             .collect();
 
-        // TODO:
-        // let byte_intervals = message
-        //     .byte_intervals
-        //     .into_iter()
-        //     .map(|m| ByteInterval::load_protobuf(context.clone(), m))
-        //     .collect::<Result<Vec<Index>>>()?;
-
         let section = Section {
             parent: None,
 
             uuid: crate::util::parse_uuid(&message.uuid)?,
             name: message.name,
             flags: section_flags?,
-            // byte_intervals: byte_intervals,
+            byte_intervals: Vec::new(),
         };
 
         let section = context.add_node(section);
@@ -115,20 +108,44 @@ impl Node<Section> {
         None
     }
 
-    // pub fn byte_intervals(&self) -> NodeIterator<ByteInterval> {
-    //     self.node_iter()
-    // }
+    pub fn add_byte_interval(
+        &mut self,
+        byte_interval: Node<ByteInterval>,
+    ) -> Node<ByteInterval> {
+        let ptr = Weak::into_raw(Rc::downgrade(&Rc::clone(&self.inner)));
+        byte_interval.inner.borrow_mut().parent = Some(ptr);
+        self.borrow_mut()
+            .byte_intervals
+            .push(Rc::clone(&byte_interval.inner));
+        byte_interval
+    }
 
-    // pub fn add_byte_interval(
-    //     &self,
-    //     byte_interval: ByteInterval,
-    // ) -> Node<ByteInterval> {
-    //     self.add_node(byte_interval)
-    // }
+    pub fn remove_byte_interval(
+        &self,
+        uuid: Uuid,
+    ) -> Option<Node<ByteInterval>> {
+        let mut section = self.inner.borrow_mut();
+        if let Some(pos) = section
+            .byte_intervals
+            .iter()
+            .position(|m| m.borrow().uuid() == uuid)
+        {
+            let ptr = section.byte_intervals.remove(pos);
+            ptr.borrow_mut().parent = None;
+            Some(Node::new(&self.context, ptr))
+        } else {
+            None
+        }
+    }
 
-    // pub fn remove_byte_interval(&self, node: Node<ByteInterval>) {
-    //     self.remove_node(node);
-    // }
+    pub fn byte_intervals(&self) -> Iter<ByteInterval> {
+        Iter {
+            inner: Some(Ref::map(self.borrow(), |section| {
+                &section.byte_intervals[..]
+            })),
+            context: &self.context,
+        }
+    }
 
     // pub fn code_blocks(&self) -> NodeIterator<CodeBlock> {
     //     let iter = self.byte_intervals().flat_map(|interval| {

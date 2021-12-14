@@ -29,8 +29,8 @@ pub use module::Module;
 mod section;
 use section::Section;
 
-// mod byte_interval;
-// use byte_interval::ByteInterval;
+mod byte_interval;
+use byte_interval::ByteInterval;
 
 // mod code_block;
 // use code_block::CodeBlock;
