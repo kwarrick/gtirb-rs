@@ -4,27 +4,31 @@ use crate::*;
 
 #[derive(Default, Debug, PartialEq)]
 pub struct ProxyBlock {
-    pub(crate) parent: Option<Index>,
-
     uuid: Uuid,
+    pub(crate) parent: Option<*const RefCell<Module>>,
 }
 
 impl ProxyBlock {
-    pub fn new() -> Self {
-        Self {
+    pub fn new(context: &mut Context) -> Node<ProxyBlock> {
+        let proxy_block = ProxyBlock {
             uuid: Uuid::new_v4(),
             ..Default::default()
-        }
+        };
+        context.add_node(proxy_block)
     }
+
     pub(crate) fn load_protobuf(
-        context: Rc<RefCell<Context>>,
+        context: &mut Context,
         message: proto::ProxyBlock,
-    ) -> Result<Index> {
+    ) -> Result<Node<ProxyBlock>> {
         let proxy_block = ProxyBlock {
             parent: None,
             uuid: crate::util::parse_uuid(&message.uuid)?,
         };
-        Ok(context.borrow_mut().proxy_block.insert(proxy_block))
+
+        let proxy_block = context.add_node(proxy_block);
+
+        Ok(proxy_block)
     }
 }
 
@@ -40,22 +44,34 @@ impl Unique for ProxyBlock {
 
 impl Node<ProxyBlock> {}
 
-impl Indexed<ProxyBlock> for Node<ProxyBlock> {
-    fn arena(&self) -> Ref<Arena<ProxyBlock>> {
-        Ref::map(self.context.borrow(), |ctx| &ctx.proxy_block)
+impl Index for ProxyBlock {
+    fn insert(context: &mut Context, node: Self) -> NodeBox<Self> {
+        let uuid = node.uuid();
+        let boxed = Rc::new(RefCell::new(node));
+        context
+            .index
+            .borrow_mut()
+            .proxy_blocks
+            .insert(uuid, Rc::clone(&boxed));
+        boxed
     }
 
-    fn arena_mut(&self) -> RefMut<Arena<ProxyBlock>> {
-        RefMut::map(self.context.borrow_mut(), |ctx| &mut ctx.proxy_block)
-    }
-}
-
-impl Child<Module> for Node<ProxyBlock> {
-    fn parent(&self) -> (Option<Index>, PhantomData<Module>) {
-        (self.borrow().parent, PhantomData)
+    fn remove(context: &mut Context, ptr: NodeBox<Self>) -> NodeBox<Self> {
+        let uuid = ptr.borrow().uuid();
+        context.index.borrow_mut().modules.remove(&uuid);
+        ptr
     }
 
-    fn set_parent(&self, (index, _): (Index, PhantomData<Module>)) {
-        self.borrow_mut().parent.replace(index);
+    fn search(context: &Context, uuid: &Uuid) -> Option<NodeBox<Self>> {
+        context
+            .index
+            .borrow()
+            .proxy_blocks
+            .get(uuid)
+            .map(|ptr| Rc::clone(&ptr))
+    }
+
+    fn rooted(ptr: NodeBox<Self>) -> bool {
+        ptr.borrow().parent.is_some()
     }
 }

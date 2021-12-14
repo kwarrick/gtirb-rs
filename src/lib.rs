@@ -38,8 +38,8 @@ use section::Section;
 // mod data_block;
 // use data_block::DataBlock;
 
-// mod proxy_block;
-// use proxy_block::ProxyBlock;
+mod proxy_block;
+use proxy_block::ProxyBlock;
 
 mod symbol;
 use symbol::Symbol;

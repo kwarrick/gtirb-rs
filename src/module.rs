@@ -17,7 +17,7 @@ pub struct Module {
     file_format: FileFormat,
     sections: Vec<NodeBox<Section>>,
     symbols: Vec<NodeBox<Symbol>>,
-    // proxy_blocks: Vec<Index>,
+    proxy_blocks: Vec<NodeBox<ProxyBlock>>,
     pub(crate) parent: Option<*const RefCell<IR>>,
 }
 
@@ -35,6 +35,7 @@ impl Module {
             file_format: FileFormat::FormatUndefined,
             sections: Vec::new(),
             symbols: Vec::new(),
+            proxy_blocks: Vec::new(),
             parent: None,
         };
         context.add_node(module)
@@ -64,7 +65,7 @@ impl Module {
             file_format: format,
             sections: Vec::new(),
             symbols: Vec::new(),
-            // proxy_blocks: proxy_blocks,
+            proxy_blocks: Vec::new(),
             parent: None,
         };
 
@@ -82,8 +83,11 @@ impl Module {
             module.add_symbol(symbol);
         }
 
-        // TODO:
-        // ProxyBlock::load_protobuf(context, m);
+        // Load ProxyBlock protobuf messages.
+        for m in message.proxies.into_iter() {
+            let proxy_block = ProxyBlock::load_protobuf(context, m)?;
+            module.add_proxy_block(proxy_block);
+        }
 
         Ok(module)
     }
@@ -218,17 +222,44 @@ impl Node<Module> {
         }
     }
 
-    // pub fn proxy_blocks(&self) -> NodeIterator<ProxyBlock> {
-    //     self.node_iter()
-    // }
+    pub fn add_proxy_block(
+        &mut self,
+        proxy_block: Node<ProxyBlock>,
+    ) -> Node<ProxyBlock> {
+        let ptr = Weak::into_raw(Rc::downgrade(&Rc::clone(&self.inner)));
+        proxy_block.inner.borrow_mut().parent = Some(ptr);
+        self.borrow_mut()
+            .proxy_blocks
+            .push(Rc::clone(&proxy_block.inner));
+        proxy_block
+    }
 
-    // pub fn add_proxy_block(&self, proxy_block: ProxyBlock) -> Node<ProxyBlock> {
-    //     self.add_node(proxy_block)
-    // }
+    pub fn remove_proxy_block(
+        &mut self,
+        uuid: Uuid,
+    ) -> Option<Node<ProxyBlock>> {
+        let mut module = self.inner.borrow_mut();
+        if let Some(pos) = module
+            .proxy_blocks
+            .iter()
+            .position(|m| m.borrow().uuid() == uuid)
+        {
+            let ptr = module.proxy_blocks.remove(pos);
+            ptr.borrow_mut().parent = None;
+            Some(Node::new(&self.context, ptr))
+        } else {
+            None
+        }
+    }
 
-    // pub fn remove_proxy_block(&self, node: Node<ProxyBlock>) {
-    //     self.remove_node(node);
-    // }
+    pub fn proxy_blocks(&self) -> Iter<ProxyBlock> {
+        Iter {
+            inner: Some(Ref::map(self.borrow(), |module| {
+                &module.proxy_blocks[..]
+            })),
+            context: &self.context,
+        }
+    }
 
     // pub fn size(&self) -> Option<u64> {
     //     let min: Option<Addr> =
