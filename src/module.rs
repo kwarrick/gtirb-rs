@@ -399,12 +399,10 @@ mod tests {
     fn new_module_is_empty() {
         let mut ctx = Context::new();
         let mut ir = IR::new(&mut ctx);
-        let _module = ir.add_module(Module::new(&mut ctx, "dummy"));
-
-        // TODO:
-        // assert_eq!(module.symbols().count(), 0);
-        // assert_eq!(module.sections().count(), 0);
-        // assert_eq!(module.proxy_blocks().count(), 0);
+        let module = ir.add_module(Module::new(&mut ctx, "dummy"));
+        assert_eq!(module.symbols().count(), 0);
+        assert_eq!(module.sections().count(), 0);
+        assert_eq!(module.proxy_blocks().count(), 0);
     }
 
     #[test]
@@ -459,22 +457,36 @@ mod tests {
         assert_eq!(module.rebase_delta(), 0x1000);
     }
 
-    //     #[test]
-    //     fn can_add_new_section() {
-    //         let ir = IR::new();
-    //         let module = Module::new("dummy");
-    //         let module = ir.add_module(module);
-    //         assert_eq!(module.ir(), ir);
-    //     }
+    #[test]
+    fn can_add_new_section() {
+        let mut ctx = Context::new();
+        let mut ir = IR::new(&mut ctx);
+        let mut module = ir.add_module(Module::new(&mut ctx, "dummy"));
+        let section = module.add_section(Section::new(&mut ctx, "foo"));
+        assert_eq!(module.sections().count(), 1);
+    }
 
-    //     #[test]
-    //     fn can_remove_section() {
-    //         let ir = IR::new();
-    //         let module = ir.add_module(Module::new("foo"));
-    //         let section = module.add_section(Section::new("bar"));
-    //         module.remove_section(section);
-    //         assert_eq!(module.sections().count(), 0);
-    //     }
+    #[test]
+    fn can_remove_section() {
+        let mut ctx = Context::new();
+        let mut ir = IR::new(&mut ctx);
+        let mut module1 = ir.add_module(Module::new(&mut ctx, "mod1"));
+        let mut module2 = ir.add_module(Module::new(&mut ctx, "mod2"));
+        let section = module1.add_section(Section::new(&mut ctx, "foo"));
+        let uuid = section.uuid();
+        assert_eq!(module1.sections().count(), 1);
+        {
+            let section = module1.remove_section(uuid);
+            assert_eq!(module1.sections().count(), 0);
+
+            let section = module2.add_section(section.unwrap());
+            assert_eq!(module2.sections().count(), 1);
+            module2.remove_section(section.uuid());
+        }
+        // Section should be dropped after preceding scope.
+        let node = ctx.find_node::<Module>(&uuid);
+        assert!(node.is_none());
+    }
 
     //     #[test]
     //     fn can_iterate_over_code_blocks() {
