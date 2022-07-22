@@ -214,4 +214,20 @@ mod tests {
         assert_eq!(interval.size(), 0xDEAD);
         assert_eq!(interval.address(), Some(Addr(0xBEEF)));
     }
+
+    #[test]
+    fn can_iterate_code_blocks() {
+        let mut ctx = Context::new();
+        let mut bi = ByteInterval::new(&mut ctx);
+        let cb1 = CodeBlock::new(&mut ctx);
+        let uuid1 = cb1.uuid();
+        let cb2 = CodeBlock::new(&mut ctx);
+        let uuid2 = cb2.uuid();
+        bi.add_code_block(cb1);
+        bi.add_code_block(cb2);
+        assert_eq!(
+            bi.code_blocks().map(|x| x.uuid()).collect::<Vec<Uuid>>(),
+            vec![uuid1, uuid2]
+        );
+    }
 }

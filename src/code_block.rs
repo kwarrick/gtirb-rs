@@ -7,11 +7,12 @@ pub struct CodeBlock {
 }
 
 impl CodeBlock {
-    pub fn new() -> Self {
-        Self {
+    pub fn new(ctx: &mut Context) -> Node<Self> {
+        let block = Self {
             uuid: Uuid::new_v4(),
             ..Default::default()
-        }
+        };
+        ctx.add_node(block)
     }
 }
 
