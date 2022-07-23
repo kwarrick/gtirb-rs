@@ -4,14 +4,14 @@ use crate::*;
 
 #[derive(Debug, Default)]
 pub(crate) struct NodeIndex {
-    pub(crate) ir: HashMap<Uuid, NodeBox<IR>>,
-    pub(crate) modules: HashMap<Uuid, NodeBox<Module>>,
-    pub(crate) symbols: HashMap<Uuid, NodeBox<Symbol>>,
-    pub(crate) sections: HashMap<Uuid, NodeBox<Section>>,
-    pub(crate) byte_intervals: HashMap<Uuid, NodeBox<ByteInterval>>,
-    pub(crate) code_blocks: HashMap<Uuid, NodeBox<CodeBlock>>,
-    pub(crate) data_blocks: HashMap<Uuid, NodeBox<DataBlock>>,
-    pub(crate) proxy_blocks: HashMap<Uuid, NodeBox<ProxyBlock>>,
+    pub(crate) ir: HashMap<Uuid, WNodeBox<IR>>,
+    pub(crate) modules: HashMap<Uuid, WNodeBox<Module>>,
+    pub(crate) symbols: HashMap<Uuid, WNodeBox<Symbol>>,
+    pub(crate) sections: HashMap<Uuid, WNodeBox<Section>>,
+    pub(crate) byte_intervals: HashMap<Uuid, WNodeBox<ByteInterval>>,
+    pub(crate) code_blocks: HashMap<Uuid, WNodeBox<CodeBlock>>,
+    pub(crate) data_blocks: HashMap<Uuid, WNodeBox<DataBlock>>,
+    pub(crate) proxy_blocks: HashMap<Uuid, WNodeBox<ProxyBlock>>,
 }
 
 #[derive(Clone, Debug)]

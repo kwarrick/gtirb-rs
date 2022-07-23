@@ -50,6 +50,7 @@ use symbolic_expression::SymbolicExpression;
 mod util;
 
 type NodeBox<T> = Rc<RefCell<T>>;
+type WNodeBox<T> = Weak<RefCell<T>>;
 
 #[derive(Debug)]
 pub struct Node<T>
@@ -93,9 +94,12 @@ where
     T: Index + Unique,
 {
     fn drop(&mut self) {
-        if !T::rooted(Rc::clone(&self.inner)) {
-            eprintln!("dropped: {:?}", self.uuid());
-            T::remove(&mut self.context, Rc::clone(&self.inner));
+        // Remove from the context when we're dropping the
+        // only extant reference to the Node.
+        // Note: This will need to be handled differently
+        // if we ever support Arc's.
+        if Rc::strong_count(&self.inner) == 1 {
+             T::remove(&mut self.context, &self.inner);
         }
     }
 }
@@ -147,8 +151,8 @@ pub trait Index {
     // Consumes a `T`,  attaches it to a `Context`, and returns a boxed reference.
     fn insert(context: &mut Context, node: Self) -> NodeBox<Self>;
 
-    // Receives a boxed `T`, removes it from a `Context`, and returns the boxed reference.
-    fn remove(context: &mut Context, ptr: NodeBox<Self>) -> NodeBox<Self>;
+    // Removes the referenced `T` it from a `Context`.
+    fn remove(context: &mut Context, ptr: &NodeBox<Self>);
 
     // Locates a `T` as it was indexed and returns the boxed reference.
     fn search(context: &Context, uuid: &Uuid) -> Option<NodeBox<Self>>;

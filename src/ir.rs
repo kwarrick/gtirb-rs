@@ -94,20 +94,14 @@ impl Index for IR {
             .index
             .borrow_mut()
             .ir
-            .insert(uuid, Rc::clone(&boxed));
+            .insert(uuid, Rc::downgrade(&boxed));
         boxed
     }
 
-    fn remove(context: &mut Context, ptr: NodeBox<Self>) -> NodeBox<Self> {
+    fn remove(context: &mut Context, ptr: &NodeBox<Self>) {
         // Remove self.
         let uuid = ptr.borrow().uuid();
         context.index.borrow_mut().ir.remove(&uuid);
-        // Remove children.
-        // TODO:
-        // for ptr in ir.modules.values_mut() {
-        //     Module::remove(context, *ptr);
-        // }
-        ptr
     }
 
     fn search(context: &Context, uuid: &Uuid) -> Option<NodeBox<Self>> {
@@ -116,7 +110,8 @@ impl Index for IR {
             .borrow()
             .ir
             .get(uuid)
-            .map(|ptr| Rc::clone(&ptr))
+            .map(|ptr| ptr.upgrade())
+            .flatten()
     }
 
     fn rooted(_: NodeBox<Self>) -> bool {

@@ -184,14 +184,13 @@ impl Index for Section {
             .index
             .borrow_mut()
             .sections
-            .insert(uuid, Rc::clone(&boxed));
+            .insert(uuid, Rc::downgrade(&boxed));
         boxed
     }
 
-    fn remove(context: &mut Context, ptr: NodeBox<Self>) -> NodeBox<Self> {
+    fn remove(context: &mut Context, ptr: &NodeBox<Self>) {
         let uuid = ptr.borrow().uuid();
         context.index.borrow_mut().modules.remove(&uuid);
-        ptr
     }
 
     fn search(context: &Context, uuid: &Uuid) -> Option<NodeBox<Self>> {
@@ -200,7 +199,8 @@ impl Index for Section {
             .borrow()
             .sections
             .get(uuid)
-            .map(|ptr| Rc::clone(&ptr))
+            .map(|ptr| ptr.upgrade())
+            .flatten()
     }
 
     fn rooted(ptr: NodeBox<Self>) -> bool {
