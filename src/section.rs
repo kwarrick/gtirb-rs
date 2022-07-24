@@ -4,13 +4,13 @@ use anyhow::{anyhow, Result};
 
 use crate::*;
 
-#[derive(Default, Debug, PartialEq)]
+#[derive(Default, Debug)]
 pub struct Section {
     uuid: Uuid,
     name: String,
     flags: HashSet<SectionFlag>,
     byte_intervals: Vec<NodeBox<ByteInterval>>,
-    pub(crate) parent: Option<*const RefCell<Module>>,
+    parent: WNodeBox<Module>,
 }
 
 impl Section {
@@ -36,7 +36,7 @@ impl Section {
             .collect();
 
         let section = Section {
-            parent: None,
+            parent: WNodeBox::new(),
 
             uuid: crate::util::parse_uuid(&message.uuid)?,
             name: message.name,
@@ -53,6 +53,13 @@ impl Section {
         }
 
         Ok(section)
+    }
+
+    pub(crate) fn set_parent(&mut self, parent: Option<&NodeBox<Module>>) {
+        self.parent = match parent {
+            Some(ptr) => Rc::downgrade(ptr),
+            None => WNodeBox::new(),
+        }
     }
 }
 
@@ -114,8 +121,7 @@ impl Node<Section> {
         &mut self,
         byte_interval: Node<ByteInterval>,
     ) -> Node<ByteInterval> {
-        let ptr = Weak::into_raw(Rc::downgrade(&Rc::clone(&self.inner)));
-        byte_interval.inner.borrow_mut().parent = Some(ptr);
+        byte_interval.inner.borrow_mut().set_parent(Some(&self.inner));
         self.borrow_mut()
             .byte_intervals
             .push(Rc::clone(&byte_interval.inner));
@@ -133,7 +139,7 @@ impl Node<Section> {
             .position(|m| m.borrow().uuid() == uuid)
         {
             let ptr = section.byte_intervals.remove(pos);
-            ptr.borrow_mut().parent = None;
+            ptr.borrow_mut().set_parent(None);
             Some(Node::new(&self.context, ptr))
         } else {
             None
@@ -204,7 +210,7 @@ impl Index for Section {
     }
 
     fn rooted(ptr: NodeBox<Self>) -> bool {
-        ptr.borrow().parent.is_some()
+        ptr.borrow().parent.upgrade().is_some()
     }
 }
 

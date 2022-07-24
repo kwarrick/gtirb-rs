@@ -4,7 +4,7 @@ use crate::*;
 
 pub use crate::Unique;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub struct Module {
     uuid: Uuid,
     name: String,
@@ -18,7 +18,7 @@ pub struct Module {
     sections: Vec<NodeBox<Section>>,
     symbols: Vec<NodeBox<Symbol>>,
     proxy_blocks: Vec<NodeBox<ProxyBlock>>,
-    pub(crate) parent: Option<*const RefCell<IR>>,
+    parent: WNodeBox<IR>,
 }
 
 impl Module {
@@ -36,7 +36,7 @@ impl Module {
             sections: Vec::new(),
             symbols: Vec::new(),
             proxy_blocks: Vec::new(),
-            parent: None,
+            parent: WNodeBox::<IR>::new(),
         };
         context.add_node(module)
     }
@@ -66,7 +66,7 @@ impl Module {
             sections: Vec::new(),
             symbols: Vec::new(),
             proxy_blocks: Vec::new(),
-            parent: None,
+            parent: WNodeBox::<IR>::new(),
         };
 
         let mut module = context.add_node(module);
@@ -90,6 +90,13 @@ impl Module {
         }
 
         Ok(module)
+    }
+
+    pub(crate) fn set_parent(&mut self, parent: Option<&NodeBox<IR>>) {
+        self.parent = match parent {
+            Some(ptr) => Rc::downgrade(ptr),
+            None => WNodeBox::<IR>::new(),
+        }
     }
 }
 
@@ -172,8 +179,7 @@ impl Node<Module> {
     }
 
     pub fn add_symbol(&mut self, symbol: Node<Symbol>) -> Node<Symbol> {
-        let ptr = Weak::into_raw(Rc::downgrade(&Rc::clone(&self.inner)));
-        symbol.inner.borrow_mut().parent = Some(ptr);
+        symbol.inner.borrow_mut().set_parent(Some(&self.inner));
         self.borrow_mut().symbols.push(Rc::clone(&symbol.inner));
         symbol
     }
@@ -186,7 +192,7 @@ impl Node<Module> {
             .position(|m| m.borrow().uuid() == uuid)
         {
             let ptr = module.symbols.remove(pos);
-            ptr.borrow_mut().parent = None;
+            ptr.borrow_mut().set_parent(None);
             Some(Node::new(&self.context, ptr))
         } else {
             None
@@ -194,8 +200,7 @@ impl Node<Module> {
     }
 
     pub fn add_section(&mut self, section: Node<Section>) -> Node<Section> {
-        let ptr = Weak::into_raw(Rc::downgrade(&Rc::clone(&self.inner)));
-        section.inner.borrow_mut().parent = Some(ptr);
+        section.inner.borrow_mut().set_parent(Some(&self.inner));
         self.borrow_mut().sections.push(Rc::clone(&section.inner));
         section
     }
@@ -208,7 +213,7 @@ impl Node<Module> {
             .position(|m| m.borrow().uuid() == uuid)
         {
             let ptr = module.sections.remove(pos);
-            ptr.borrow_mut().parent = None;
+            ptr.borrow_mut().set_parent(None);
             Some(Node::new(&self.context, ptr))
         } else {
             None
@@ -346,9 +351,7 @@ impl Node<Module> {
         self.inner
             .borrow()
             .parent
-            .map(|ptr| unsafe { Weak::from_raw(ptr) })
-            .map(|weak| weak.upgrade())
-            .flatten()
+            .upgrade()
             .map(|strong| Node::new(&self.context, strong))
     }
 }
@@ -381,7 +384,7 @@ impl Index for Module {
     }
 
     fn rooted(ptr: NodeBox<Self>) -> bool {
-        ptr.borrow().parent.is_some()
+        ptr.borrow().parent.upgrade().is_some()
     }
 }
 

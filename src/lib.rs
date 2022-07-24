@@ -106,10 +106,11 @@ where
 
 impl<T> PartialEq for Node<T>
 where
-    T: PartialEq + Index + Unique,
+    T: Index + Unique,
 {
+    // Pointer equality
     fn eq(&self, other: &Self) -> bool {
-        *self.inner.borrow() == *other.inner.borrow()
+        Rc::ptr_eq(&self.inner, &other.inner)
     }
 }
 

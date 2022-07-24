@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use crate::*;
 
-#[derive(Default, Debug, PartialEq)]
+#[derive(Default, Debug)]
 pub struct ByteInterval {
     uuid: Uuid,
     size: u64,
@@ -13,7 +13,7 @@ pub struct ByteInterval {
     code_blocks: Vec<NodeBox<CodeBlock>>,
     data_blocks: Vec<NodeBox<DataBlock>>,
     symbolic_expressions: HashMap<u64, SymbolicExpression>,
-    pub(crate) parent: Option<*const RefCell<Section>>,
+    parent: WNodeBox<Section>,
 }
 
 impl ByteInterval {
@@ -37,12 +37,19 @@ impl ByteInterval {
             code_blocks: Vec::new(),
             data_blocks: Vec::new(),
             symbolic_expressions: HashMap::new(),
-            parent: None,
+            parent: WNodeBox::new(),
         };
 
         let byte_interval = context.add_node(byte_interval);
 
         Ok(byte_interval)
+    }
+
+    pub(crate) fn set_parent(&mut self, parent: Option<&NodeBox<Section>>) {
+        self.parent = match parent {
+            Some(ptr) => Rc::downgrade(ptr),
+            None => WNodeBox::new(),
+        }
     }
 }
 
@@ -96,8 +103,7 @@ impl Node<ByteInterval> {
         &mut self,
         code_block: Node<CodeBlock>,
     ) -> Node<CodeBlock> {
-        let ptr = Weak::into_raw(Rc::downgrade(&Rc::clone(&self.inner)));
-        code_block.inner.borrow_mut().parent = Some(ptr);
+        code_block.inner.borrow_mut().set_parent(Some(&self.inner));
         self.borrow_mut()
             .code_blocks
             .push(Rc::clone(&code_block.inner));
@@ -112,7 +118,7 @@ impl Node<ByteInterval> {
             .position(|m| m.borrow().uuid() == uuid)
         {
             let ptr = byte_interval.code_blocks.remove(pos);
-            ptr.borrow_mut().parent = None;
+            ptr.borrow_mut().set_parent(None);
             Some(Node::new(&self.context, ptr))
         } else {
             None
@@ -141,8 +147,7 @@ impl Node<ByteInterval> {
         &mut self,
         data_block: Node<DataBlock>,
     ) -> Node<DataBlock> {
-        let ptr = Weak::into_raw(Rc::downgrade(&Rc::clone(&self.inner)));
-        data_block.inner.borrow_mut().parent = Some(ptr);
+        data_block.inner.borrow_mut().set_parent(Some(&self.inner));
         self.borrow_mut()
             .data_blocks
             .push(Rc::clone(&data_block.inner));
@@ -157,7 +162,7 @@ impl Node<ByteInterval> {
             .position(|m| m.borrow().uuid() == uuid)
         {
             let ptr = byte_interval.data_blocks.remove(pos);
-            ptr.borrow_mut().parent = None;
+            ptr.borrow_mut().set_parent(None);
             Some(Node::new(&self.context, ptr))
         } else {
             None
@@ -193,7 +198,7 @@ impl Index for ByteInterval {
     }
 
     fn rooted(ptr: NodeBox<Self>) -> bool {
-        ptr.borrow().parent.is_some()
+        ptr.borrow().parent.upgrade().is_some()
     }
 }
 

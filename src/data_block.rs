@@ -1,9 +1,9 @@
 use crate::*;
 
-#[derive(Default, Debug, PartialEq)]
+#[derive(Default, Debug)]
 pub struct DataBlock {
     uuid: Uuid,
-    pub(crate) parent: Option<*const RefCell<ByteInterval>>,
+    parent: WNodeBox<ByteInterval>,
 }
 
 impl DataBlock {
@@ -13,6 +13,13 @@ impl DataBlock {
             ..Default::default()
         };
         ctx.add_node(block)
+    }
+
+    pub(crate) fn set_parent(&mut self, parent: Option<&NodeBox<ByteInterval>>) {
+        self.parent = match parent {
+            Some(ptr) => Rc::downgrade(ptr),
+            None => WNodeBox::new(),
+        }
     }
 }
 
@@ -56,6 +63,6 @@ impl Index for DataBlock {
     }
 
     fn rooted(ptr: NodeBox<Self>) -> bool {
-        ptr.borrow().parent.is_some()
+        ptr.borrow().parent.upgrade().is_some()
     }
 }

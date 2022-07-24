@@ -8,12 +8,12 @@ pub enum Payload {
     Referent(Uuid),
 }
 
-#[derive(Debug, Default, PartialEq)]
+#[derive(Debug, Default)]
 pub struct Symbol {
     uuid: Uuid,
     name: String,
     payload: Option<Payload>,
-    pub(crate) parent: Option<*const RefCell<Module>>,
+    parent: WNodeBox<Module>,
 }
 
 impl Symbol {
@@ -41,7 +41,7 @@ impl Symbol {
         };
 
         let symbol = Symbol {
-            parent: None,
+            parent: WNodeBox::new(),
 
             uuid: crate::util::parse_uuid(&message.uuid)?,
             name: message.name,
@@ -51,6 +51,13 @@ impl Symbol {
         let symbol = context.add_node(symbol);
 
         Ok(symbol)
+    }
+
+    pub(crate) fn set_parent(&mut self, parent: Option<&NodeBox<Module>>) {
+        self.parent = match parent {
+            Some(ptr) => Rc::downgrade(ptr),
+            None => WNodeBox::new(),
+        }
     }
 }
 
@@ -94,6 +101,6 @@ impl Index for Symbol {
     }
 
     fn rooted(ptr: NodeBox<Self>) -> bool {
-        ptr.borrow().parent.is_some()
+        ptr.borrow().parent.upgrade().is_some()
     }
 }

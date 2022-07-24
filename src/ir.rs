@@ -1,6 +1,6 @@
 use crate::*;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub struct IR {
     uuid: Uuid,
     version: u32,
@@ -50,8 +50,7 @@ impl Node<IR> {
     }
 
     pub fn add_module(&mut self, module: Node<Module>) -> Node<Module> {
-        let ptr = Weak::into_raw(Rc::downgrade(&Rc::clone(&self.inner)));
-        module.inner.borrow_mut().parent = Some(ptr);
+        module.inner.borrow_mut().set_parent(Some(&self.inner));
         self.borrow_mut().modules.push(Rc::clone(&module.inner));
         module
     }
@@ -61,7 +60,7 @@ impl Node<IR> {
         if let Some(pos) = ir.modules.iter().position(|m| m.borrow().uuid() == uuid)
         {
             let ptr = ir.modules.remove(pos);
-            ptr.borrow_mut().parent = None;
+            ptr.borrow_mut().set_parent(None);
             Some(Node::new(&self.context, ptr))
         } else {
             None
