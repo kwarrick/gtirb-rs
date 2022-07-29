@@ -17,19 +17,19 @@ pub struct Symbol {
 }
 
 impl Symbol {
-    pub fn new(context: &mut Context, name: &str) -> Node<Symbol> {
+    pub fn new(context: &mut Context, name: &str) -> SymbolRef {
         let symbol = Symbol {
             uuid: Uuid::new_v4(),
             name: name.to_owned(),
             ..Default::default()
         };
-        context.add_node(symbol)
+        SymbolRef::new(context.add_node(symbol))
     }
 
     pub(crate) fn load_protobuf(
         context: &mut Context,
         message: proto::Symbol,
-    ) -> Result<Node<Symbol>> {
+    ) -> Result<SymbolRef> {
         use crate::proto::symbol::OptionalPayload;
 
         let payload = match message.optional_payload {
@@ -48,7 +48,7 @@ impl Symbol {
             payload: payload,
         };
 
-        let symbol = context.add_node(symbol);
+        let symbol = SymbolRef::new(context.add_node(symbol));
 
         Ok(symbol)
     }
@@ -71,7 +71,15 @@ impl Unique for Symbol {
     }
 }
 
-impl Node<Symbol> {}
+pub struct SymbolRef {
+    pub(crate) node: Node<Symbol>
+}
+
+impl SymbolRef {
+    pub(crate) fn new(node: Node<Symbol>) -> Self {
+        Self { node: node }
+    }
+}
 
 impl Index for Symbol {
     fn insert(context: &mut Context, node: Self) -> NodeBox<Self> {
@@ -90,17 +98,13 @@ impl Index for Symbol {
         context.index.borrow_mut().symbols.remove(&uuid);
     }
 
-    fn search(context: &Context, uuid: &Uuid) -> Option<NodeBox<Self>> {
-        context
-            .index
-            .borrow()
-            .symbols
-            .get(uuid)
-            .map(|ptr| ptr.upgrade())
-            .flatten()
-    }
-
     fn rooted(ptr: NodeBox<Self>) -> bool {
         ptr.borrow().parent.upgrade().is_some()
+    }
+}
+
+impl IsRefFor<Symbol> for SymbolRef {
+    fn new(node: Node<Symbol>) -> Self {
+        Self { node: node }
     }
 }

@@ -7,12 +7,12 @@ pub struct CodeBlock {
 }
 
 impl CodeBlock {
-    pub fn new(ctx: &mut Context) -> Node<Self> {
+    pub fn new(ctx: &mut Context) -> CodeBlockRef {
         let block = Self {
             uuid: Uuid::new_v4(),
             ..Default::default()
         };
-        ctx.add_node(block)
+        CodeBlockRef::new(ctx.add_node(block))
     }
 
     pub(crate) fn set_parent(&mut self, parent: Option<&NodeBox<ByteInterval>>) {
@@ -33,7 +33,15 @@ impl Unique for CodeBlock {
     }
 }
 
-impl Node<CodeBlock> {}
+pub struct CodeBlockRef {
+    pub(crate) node: Node<CodeBlock>,
+}
+
+impl CodeBlockRef {
+    pub fn uuid(&self) -> Uuid {
+        self.node.borrow().uuid
+    }
+}
 
 impl Index for CodeBlock {
     fn insert(context: &mut Context, node: Self) -> NodeBox<Self> {
@@ -52,17 +60,13 @@ impl Index for CodeBlock {
         context.index.borrow_mut().code_blocks.remove(&uuid);
     }
 
-    fn search(context: &Context, uuid: &Uuid) -> Option<NodeBox<Self>> {
-        context
-            .index
-            .borrow()
-            .code_blocks
-            .get(uuid)
-            .map(|ptr| ptr.upgrade())
-            .flatten()
-    }
-
     fn rooted(ptr: NodeBox<Self>) -> bool {
         ptr.borrow().parent.upgrade().is_some()
+    }
+}
+
+impl IsRefFor<CodeBlock> for CodeBlockRef {
+    fn new(node: Node<CodeBlock>) -> Self {
+        Self { node: node }
     }
 }

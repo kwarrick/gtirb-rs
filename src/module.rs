@@ -22,7 +22,7 @@ pub struct Module {
 }
 
 impl Module {
-    pub fn new(context: &mut Context, name: &str) -> Node<Module> {
+    pub fn new(context: &mut Context, name: &str) -> ModuleRef {
         let module = Module {
             name: name.to_owned(),
             uuid: Uuid::new_v4(),
@@ -38,13 +38,13 @@ impl Module {
             proxy_blocks: Vec::new(),
             parent: WNodeBox::<IR>::new(),
         };
-        context.add_node(module)
+        ModuleRef { node: context.add_node(module) }
     }
 
     pub fn load_protobuf(
         context: &mut Context,
         message: proto::Module,
-    ) -> Result<Node<Module>> {
+    ) -> Result<ModuleRef> {
         let format = FileFormat::from_i32(message.file_format)
             .ok_or(anyhow!("Invalid FileFormat"))?;
 
@@ -69,24 +69,24 @@ impl Module {
             parent: WNodeBox::<IR>::new(),
         };
 
-        let mut module = context.add_node(module);
+        let mut module = ModuleRef { node: context.add_node(module) };
 
         // Load Section protobuf messages.
         for m in message.sections.into_iter() {
             let section = Section::load_protobuf(context, m)?;
-            module.add_section(section);
+            module.add_section(&section);
         }
 
         // Load Symbol protobuf messages.
         for m in message.symbols.into_iter() {
             let symbol = Symbol::load_protobuf(context, m)?;
-            module.add_symbol(symbol);
+            module.add_symbol(&symbol);
         }
 
         // Load ProxyBlock protobuf messages.
         for m in message.proxies.into_iter() {
             let proxy_block = ProxyBlock::load_protobuf(context, m)?;
-            module.add_proxy_block(proxy_block);
+            module.add_proxy_block(&proxy_block);
         }
 
         Ok(module)
@@ -100,37 +100,46 @@ impl Module {
     }
 }
 
-impl Node<Module> {
+#[derive(Debug, PartialEq)]
+pub struct ModuleRef {
+    pub(crate) node: Node<Module>
+}
+
+impl ModuleRef {
+    pub fn uuid(&self) -> Uuid {
+        self.node.borrow().uuid
+    }
+
     pub fn name(&self) -> Ref<String> {
-        Ref::map(self.borrow(), |module| &module.name)
+        Ref::map(self.node.borrow(), |module| &module.name)
     }
 
     pub fn set_name<T: AsRef<str>>(&mut self, name: T) {
-        self.borrow_mut().name = name.as_ref().to_owned();
+        self.node.borrow_mut().name = name.as_ref().to_owned();
     }
 
     pub fn binary_path(&self) -> Ref<String> {
-        Ref::map(self.borrow(), |module| &module.binary_path)
+        Ref::map(self.node.borrow(), |module| &module.binary_path)
     }
 
     pub fn set_binary_path<T: AsRef<str>>(&mut self, path: T) {
-        self.borrow_mut().binary_path = path.as_ref().to_owned();
+        self.node.borrow_mut().binary_path = path.as_ref().to_owned();
     }
 
     pub fn file_format(&self) -> FileFormat {
-        self.borrow().file_format
+        self.node.borrow().file_format
     }
 
     pub fn set_file_format(&mut self, file_format: FileFormat) {
-        self.borrow_mut().file_format = file_format;
+        self.node.borrow_mut().file_format = file_format;
     }
 
     pub fn isa(&self) -> ISA {
-        self.borrow().isa
+        self.node.borrow().isa
     }
 
     pub fn set_isa(&mut self, isa: ISA) {
-        self.borrow_mut().isa = isa;
+        self.node.borrow_mut().isa = isa;
     }
 
     // pub fn entry_point(&self) -> Option<Node<CodeBlock>> {
@@ -144,48 +153,48 @@ impl Node<Module> {
     // }
 
     pub fn byte_order(&self) -> ByteOrder {
-        self.borrow().byte_order
+        self.node.borrow().byte_order
     }
 
     pub fn set_byte_order(&mut self, byte_order: ByteOrder) {
-        self.borrow_mut().byte_order = byte_order;
+        self.node.borrow_mut().byte_order = byte_order;
     }
 
     pub fn preferred_address(&self) -> Addr {
-        self.borrow().preferred_address
+        self.node.borrow().preferred_address
     }
 
     pub fn set_preferred_address(&mut self, address: Addr) {
-        self.borrow_mut().preferred_address = address;
+        self.node.borrow_mut().preferred_address = address;
     }
 
     pub fn rebase_delta(&self) -> i64 {
-        self.borrow().rebase_delta
+        self.node.borrow().rebase_delta
     }
 
     pub fn set_rebase_delta(&mut self, rebase_delta: i64) {
-        self.borrow_mut().rebase_delta = rebase_delta;
+        self.node.borrow_mut().rebase_delta = rebase_delta;
     }
 
     pub fn is_relocated(&self) -> bool {
-        self.borrow().rebase_delta != 0
+        self.node.borrow().rebase_delta != 0
     }
 
-    pub fn symbols(&self) -> Iter<Symbol> {
+    pub fn symbols(&self) -> Iter<Symbol, SymbolRef> {
         Iter {
-            inner: Some(Ref::map(self.borrow(), |module| &module.symbols[..])),
-            context: &self.context,
+            inner: Some(Ref::map(self.node.borrow(), |module| &module.symbols[..])),
+            context: &self.node.context,
+            phantom: PhantomData,
         }
     }
 
-    pub fn add_symbol(&mut self, symbol: Node<Symbol>) -> Node<Symbol> {
-        symbol.inner.borrow_mut().set_parent(Some(&self.inner));
-        self.borrow_mut().symbols.push(Rc::clone(&symbol.inner));
-        symbol
+    pub fn add_symbol(&mut self, symbol: &SymbolRef) {
+        symbol.node.inner.borrow_mut().set_parent(Some(&self.node.inner));
+        self.node.borrow_mut().symbols.push(Rc::clone(&symbol.node.inner));
     }
 
-    pub fn remove_symbol(&self, uuid: Uuid) -> Option<Node<Symbol>> {
-        let mut module = self.inner.borrow_mut();
+    pub fn remove_symbol(&self, uuid: Uuid) -> Option<SymbolRef> {
+        let mut module = self.node.inner.borrow_mut();
         if let Some(pos) = module
             .symbols
             .iter()
@@ -193,20 +202,19 @@ impl Node<Module> {
         {
             let ptr = module.symbols.remove(pos);
             ptr.borrow_mut().set_parent(None);
-            Some(Node::new(&self.context, ptr))
+            Some(SymbolRef::new(Node::new(&self.node.context, ptr)))
         } else {
             None
         }
     }
 
-    pub fn add_section(&mut self, section: Node<Section>) -> Node<Section> {
-        section.inner.borrow_mut().set_parent(Some(&self.inner));
-        self.borrow_mut().sections.push(Rc::clone(&section.inner));
-        section
+    pub fn add_section(&mut self, section: &SectionRef) {
+        section.node.inner.borrow_mut().set_parent(Some(&self.node.inner));
+        self.node.borrow_mut().sections.push(Rc::clone(&section.node.inner));
     }
 
-    pub fn remove_section(&mut self, uuid: Uuid) -> Option<Node<Section>> {
-        let mut module = self.inner.borrow_mut();
+    pub fn remove_section(&mut self, uuid: Uuid) -> Option<SectionRef> {
+        let mut module = self.node.inner.borrow_mut();
         if let Some(pos) = module
             .sections
             .iter()
@@ -214,36 +222,36 @@ impl Node<Module> {
         {
             let ptr = module.sections.remove(pos);
             ptr.borrow_mut().set_parent(None);
-            Some(Node::new(&self.context, ptr))
+            Some(SectionRef::new(Node::new(&self.node.context, ptr)))
         } else {
             None
         }
     }
 
-    pub fn sections<'a>(&'a self) -> Iter<Section> {
+    pub fn sections<'a>(&'a self) -> Iter<Section, SectionRef> {
         Iter {
-            inner: Some(Ref::map(self.borrow(), |module| &module.sections[..])),
-            context: &self.context,
+            inner: Some(Ref::map(self.node.borrow(), |module| &module.sections[..])),
+            context: &self.node.context,
+            phantom: PhantomData,
         }
     }
 
     pub fn add_proxy_block(
         &mut self,
-        proxy_block: Node<ProxyBlock>,
-    ) -> Node<ProxyBlock> {
-        let ptr = Weak::into_raw(Rc::downgrade(&Rc::clone(&self.inner)));
-        proxy_block.inner.borrow_mut().parent = Some(ptr);
-        self.borrow_mut()
+        proxy_block: &ProxyBlockRef,
+    ) {
+        let ptr = Weak::into_raw(Rc::downgrade(&Rc::clone(&self.node.inner)));
+        proxy_block.node.inner.borrow_mut().parent = Some(ptr);
+        self.node.borrow_mut()
             .proxy_blocks
-            .push(Rc::clone(&proxy_block.inner));
-        proxy_block
+            .push(Rc::clone(&proxy_block.node.inner));
     }
 
     pub fn remove_proxy_block(
         &mut self,
         uuid: Uuid,
-    ) -> Option<Node<ProxyBlock>> {
-        let mut module = self.inner.borrow_mut();
+    ) -> Option<ProxyBlockRef> {
+        let mut module = self.node.inner.borrow_mut();
         if let Some(pos) = module
             .proxy_blocks
             .iter()
@@ -251,18 +259,19 @@ impl Node<Module> {
         {
             let ptr = module.proxy_blocks.remove(pos);
             ptr.borrow_mut().parent = None;
-            Some(Node::new(&self.context, ptr))
+            Some(ProxyBlockRef::new(Node::new(&self.node.context, ptr)))
         } else {
             None
         }
     }
 
-    pub fn proxy_blocks(&self) -> Iter<ProxyBlock> {
+    pub fn proxy_blocks(&self) -> Iter<ProxyBlock, ProxyBlockRef> {
         Iter {
-            inner: Some(Ref::map(self.borrow(), |module| {
+            inner: Some(Ref::map(self.node.borrow(), |module| {
                 &module.proxy_blocks[..]
             })),
-            context: &self.context,
+            context: &self.node.context,
+            phantom: PhantomData,
         }
     }
 
@@ -334,6 +343,20 @@ impl Node<Module> {
 
     // symbolic_expressions()
     // get_symbol_reference<T>(symbol: Symbol) -> Node<T>
+
+    pub fn ir(&self) -> Option<IRRef> {
+        self.node.inner
+            .borrow()
+            .parent
+            .upgrade()
+            .map(|strong| IRRef::new(Node::new(&self.node.context, strong)))
+    }
+}
+
+impl IsRefFor<Module> for ModuleRef {
+    fn new(node: Node<Module>) -> Self {
+        Self { node: node }
+    }
 }
 
 impl Unique for Module {
@@ -343,16 +366,6 @@ impl Unique for Module {
 
     fn set_uuid(&mut self, uuid: Uuid) {
         self.uuid = uuid;
-    }
-}
-
-impl Node<Module> {
-    pub fn ir(&self) -> Option<Node<IR>> {
-        self.inner
-            .borrow()
-            .parent
-            .upgrade()
-            .map(|strong| Node::new(&self.context, strong))
     }
 }
 
@@ -371,16 +384,6 @@ impl Index for Module {
     fn remove(context: &mut Context, ptr: &NodeBox<Self>) {
         let uuid = ptr.borrow().uuid();
         context.index.borrow_mut().modules.remove(&uuid);
-    }
-
-    fn search(context: &Context, uuid: &Uuid) -> Option<NodeBox<Self>> {
-        context
-            .index
-            .borrow()
-            .modules
-            .get(uuid)
-            .map(|ptr| ptr.upgrade())
-            .flatten()
     }
 
     fn rooted(ptr: NodeBox<Self>) -> bool {
@@ -402,7 +405,8 @@ mod tests {
     fn new_module_is_empty() {
         let mut ctx = Context::new();
         let mut ir = IR::new(&mut ctx);
-        let module = ir.add_module(Module::new(&mut ctx, "dummy"));
+        let module = Module::new(&mut ctx, "dummy");
+        ir.add_module(&module);
         assert_eq!(module.symbols().count(), 0);
         assert_eq!(module.sections().count(), 0);
         assert_eq!(module.proxy_blocks().count(), 0);
@@ -413,7 +417,8 @@ mod tests {
         let mut ctx = Context::new();
         let mut ir = IR::new(&mut ctx);
         let path = "/home/gt/irb/foo";
-        let mut module = ir.add_module(Module::new(&mut ctx, "dummy"));
+        let mut module = Module::new(&mut ctx, "dummy");
+        ir.add_module(&module);
         module.set_binary_path(path);
         assert_eq!(*module.binary_path(), path);
     }
@@ -422,7 +427,8 @@ mod tests {
     fn can_get_file_format_default() {
         let mut ctx = Context::new();
         let mut ir = IR::new(&mut ctx);
-        let module = ir.add_module(Module::new(&mut ctx, "dummy"));
+        let module = Module::new(&mut ctx, "dummy");
+        ir.add_module(&module);
         assert_eq!(module.file_format(), FileFormat::FormatUndefined);
     }
 
@@ -430,7 +436,8 @@ mod tests {
     fn can_set_file_format() {
         let mut ctx = Context::new();
         let mut ir = IR::new(&mut ctx);
-        let mut module = ir.add_module(Module::new(&mut ctx, "dummy"));
+        let mut module = Module::new(&mut ctx, "dummy");
+        ir.add_module(&module);
         module.set_file_format(FileFormat::Coff);
         assert_eq!(module.file_format(), FileFormat::Coff);
 
@@ -442,7 +449,8 @@ mod tests {
     fn can_set_name() {
         let mut ctx = Context::new();
         let mut ir = IR::new(&mut ctx);
-        let mut module = ir.add_module(Module::new(&mut ctx, "dummy"));
+        let mut module = Module::new(&mut ctx, "dummy");
+        ir.add_module(&module);
         module.set_name("example");
         assert_eq!(*module.name(), "example");
     }
@@ -451,7 +459,8 @@ mod tests {
     fn can_relocate_module() {
         let mut ctx = Context::new();
         let mut ir = IR::new(&mut ctx);
-        let mut module = ir.add_module(Module::new(&mut ctx, "dummy"));
+        let mut module = Module::new(&mut ctx, "dummy");
+        ir.add_module(&module);
         assert!(!module.is_relocated());
         assert_eq!(module.rebase_delta(), 0);
 
@@ -464,8 +473,9 @@ mod tests {
     fn can_add_new_section() {
         let mut ctx = Context::new();
         let mut ir = IR::new(&mut ctx);
-        let mut module = ir.add_module(Module::new(&mut ctx, "dummy"));
-        module.add_section(Section::new(&mut ctx, "foo"));
+        let mut module = Module::new(&mut ctx, "dummy");
+        ir.add_module(&module);
+        module.add_section(&Section::new(&mut ctx, "foo"));
         assert_eq!(module.sections().count(), 1);
     }
 
@@ -473,21 +483,25 @@ mod tests {
     fn can_remove_section() {
         let mut ctx = Context::new();
         let mut ir = IR::new(&mut ctx);
-        let mut module1 = ir.add_module(Module::new(&mut ctx, "mod1"));
-        let mut module2 = ir.add_module(Module::new(&mut ctx, "mod2"));
-        let section = module1.add_section(Section::new(&mut ctx, "foo"));
+        let mut module1 = Module::new(&mut ctx, "mod1");
+        ir.add_module(&module1);
+        let mut module2 = Module::new(&mut ctx, "mod2");
+        ir.add_module(&module2);
+        let section = Section::new(&mut ctx, "foo");
+        module1.add_section(&section);
         let uuid = section.uuid();
         assert_eq!(module1.sections().count(), 1);
         {
             let section = module1.remove_section(uuid);
             assert_eq!(module1.sections().count(), 0);
 
-            let section = module2.add_section(section.unwrap());
+            let section = section.unwrap();
+            module2.add_section(&section);
             assert_eq!(module2.sections().count(), 1);
             module2.remove_section(section.uuid());
         }
         // Section should be dropped after preceding scope.
-        let node = ctx.find_node::<Module>(&uuid);
+        let node = ctx.find_module(&uuid);
         assert!(node.is_none());
     }
 

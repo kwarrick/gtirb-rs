@@ -7,12 +7,12 @@ pub struct DataBlock {
 }
 
 impl DataBlock {
-    pub fn new(ctx: &mut Context) -> Node<Self> {
+    pub fn new(ctx: &mut Context) -> DataBlockRef {
         let block = Self {
             uuid: Uuid::new_v4(),
             ..Default::default()
         };
-        ctx.add_node(block)
+        DataBlockRef::new(ctx.add_node(block))
     }
 
     pub(crate) fn set_parent(&mut self, parent: Option<&NodeBox<ByteInterval>>) {
@@ -33,7 +33,15 @@ impl Unique for DataBlock {
     }
 }
 
-impl Node<DataBlock> {}
+pub struct DataBlockRef {
+    pub(crate) node: Node<DataBlock>,
+}
+
+impl DataBlockRef {
+    pub fn uuid(&self) -> Uuid {
+        self.node.borrow().uuid
+    }
+}
 
 impl Index for DataBlock {
     fn insert(context: &mut Context, node: Self) -> NodeBox<Self> {
@@ -52,17 +60,13 @@ impl Index for DataBlock {
         context.index.borrow_mut().data_blocks.remove(&uuid);
     }
 
-    fn search(context: &Context, uuid: &Uuid) -> Option<NodeBox<Self>> {
-        context
-            .index
-            .borrow()
-            .data_blocks
-            .get(uuid)
-            .map(|ptr| ptr.upgrade())
-            .flatten()
-    }
-
     fn rooted(ptr: NodeBox<Self>) -> bool {
         ptr.borrow().parent.upgrade().is_some()
+    }
+}
+
+impl IsRefFor<DataBlock> for DataBlockRef {
+    fn new(node: Node<DataBlock>) -> Self {
+        Self { node: node }
     }
 }

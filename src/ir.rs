@@ -8,19 +8,19 @@ pub struct IR {
 }
 
 impl IR {
-    pub fn new(context: &mut Context) -> Node<IR> {
+    pub fn new(context: &mut Context) -> IRRef {
         let ir = IR {
             uuid: Uuid::new_v4(),
             version: 1,
             modules: Vec::new(),
         };
-        context.add_node(ir)
+        IRRef::new(context.add_node(ir))
     }
 
     pub fn load_protobuf(
         context: &mut Context,
         message: proto::Ir,
-    ) -> Result<Node<IR>> {
+    ) -> Result<IRRef> {
         // Load IR protobuf message.
         let ir = IR {
             uuid: crate::util::parse_uuid(&message.uuid)?,
@@ -28,49 +28,58 @@ impl IR {
             modules: Vec::new(),
         };
 
-        let mut ir = context.add_node(ir);
+        let mut ir = IRRef::new(context.add_node(ir));
 
         // Load Module protobuf messages.
         for m in message.modules.into_iter() {
             let module = Module::load_protobuf(context, m)?;
-            ir.add_module(module);
+            ir.add_module(&module);
         }
 
         Ok(ir)
     }
 }
 
-impl Node<IR> {
+#[derive(Debug, PartialEq)]
+pub struct IRRef {
+    node: Node<IR>,
+}
+
+impl IRRef {
+    pub fn uuid(&self) -> Uuid {
+        self.node.borrow().uuid
+    }
+
     pub fn version(&self) -> u32 {
-        self.borrow().version
+        self.node.borrow().version
     }
 
     pub fn set_version(&mut self, version: u32) {
-        self.borrow_mut().version = version;
+        self.node.borrow_mut().version = version;
     }
 
-    pub fn add_module(&mut self, module: Node<Module>) -> Node<Module> {
-        module.inner.borrow_mut().set_parent(Some(&self.inner));
-        self.borrow_mut().modules.push(Rc::clone(&module.inner));
-        module
+    pub fn add_module(&mut self, module: &ModuleRef) {
+        module.node.inner.borrow_mut().set_parent(Some(&self.node.inner));
+        self.node.borrow_mut().modules.push(Rc::clone(&module.node.inner));
     }
 
-    pub fn remove_module(&mut self, uuid: Uuid) -> Option<Node<Module>> {
-        let mut ir = self.inner.borrow_mut();
+    pub fn remove_module(&mut self, uuid: Uuid) -> Option<ModuleRef> {
+        let mut ir = self.node.inner.borrow_mut();
         if let Some(pos) = ir.modules.iter().position(|m| m.borrow().uuid() == uuid)
         {
             let ptr = ir.modules.remove(pos);
             ptr.borrow_mut().set_parent(None);
-            Some(Node::new(&self.context, ptr))
+            Some(ModuleRef{ node: Node::new(&self.node.context, ptr) })
         } else {
             None
         }
     }
 
-    pub fn modules<'a>(&'a self) -> Iter<Module> {
+    pub fn modules<'a>(&'a self) -> Iter<Module, ModuleRef> {
         Iter {
-            inner: Some(Ref::map(self.borrow(), |ir| &ir.modules[..])),
-            context: &self.context,
+            inner: Some(Ref::map(self.node.borrow(), |ir| &ir.modules[..])),
+            context: &self.node.context,
+            phantom: PhantomData,
         }
     }
 }
@@ -103,18 +112,14 @@ impl Index for IR {
         context.index.borrow_mut().ir.remove(&uuid);
     }
 
-    fn search(context: &Context, uuid: &Uuid) -> Option<NodeBox<Self>> {
-        context
-            .index
-            .borrow()
-            .ir
-            .get(uuid)
-            .map(|ptr| ptr.upgrade())
-            .flatten()
-    }
-
     fn rooted(_: NodeBox<Self>) -> bool {
         true
+    }
+}
+
+impl IsRefFor<IR> for IRRef {
+    fn new(node: Node<IR>) -> Self {
+        Self { node: node }
     }
 }
 
@@ -149,7 +154,7 @@ mod tests {
         let mut ctx = Context::new();
         let mut ir = IR::new(&mut ctx);
         let module = Module::new(&mut ctx, "dummy");
-        ir.add_module(module);
+        ir.add_module(&module);
 
         let module = ir.modules().nth(0);
         assert!(module.is_some());
@@ -161,16 +166,19 @@ mod tests {
         let mut ctx = Context::new();
         let mut ir = IR::new(&mut ctx);
 
-        let module = Module::new(&mut ctx, "dummy");
-        let uuid = module.uuid();
-        ir.add_module(module);
+        let uuid;
+        {
+            let module = Module::new(&mut ctx, "dummy");
+            uuid = module.uuid();
+            ir.add_module(&module);
+        }
 
         {
             let _module = ir.remove_module(uuid);
             assert_eq!(ir.modules().count(), 0);
         }
         // Module should be dropped after preceding scope.
-        let node = ctx.find_node::<Module>(&uuid);
+        let node = ctx.find_module(&uuid);
         assert!(node.is_none());
     }
 
@@ -178,8 +186,8 @@ mod tests {
     fn can_modify_modules() {
         let mut ctx = Context::new();
         let mut ir = IR::new(&mut ctx);
-        ir.add_module(Module::new(&mut ctx, "foo"));
-        ir.add_module(Module::new(&mut ctx, "bar"));
+        ir.add_module(&Module::new(&mut ctx, "foo"));
+        ir.add_module(&Module::new(&mut ctx, "bar"));
         for mut module in ir.modules() {
             module.set_preferred_address(Addr(1));
         }

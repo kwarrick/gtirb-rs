@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 use std::cell::RefCell;
 use std::cell::{Ref, RefMut};
+use std::marker::PhantomData;
 use std::path::Path;
 use std::rc::{Rc, Weak};
 
@@ -22,37 +23,45 @@ pub use context::Context;
 
 mod ir;
 pub use ir::IR;
+pub use ir::IRRef;
 
 mod module;
 pub use module::Module;
+pub use module::ModuleRef;
 
 mod section;
-use section::Section;
+pub use section::Section;
+pub use section::SectionRef;
 
 mod byte_interval;
-use byte_interval::ByteInterval;
+pub use byte_interval::ByteInterval;
+pub use byte_interval::ByteIntervalRef;
 
 mod code_block;
-use code_block::CodeBlock;
+pub use code_block::CodeBlock;
+pub use code_block::CodeBlockRef;
 
 mod data_block;
-use data_block::DataBlock;
+pub use data_block::DataBlock;
+pub use data_block::DataBlockRef;
 
 mod proxy_block;
-use proxy_block::ProxyBlock;
+pub use proxy_block::ProxyBlock;
+pub use proxy_block::ProxyBlockRef;
 
 mod symbol;
-use symbol::Symbol;
+pub use symbol::Symbol;
+pub use symbol::SymbolRef;
 
 mod symbolic_expression;
-use symbolic_expression::SymbolicExpression;
+pub use symbolic_expression::SymbolicExpression;
 
 mod util;
 
 type NodeBox<T> = Rc<RefCell<T>>;
 type WNodeBox<T> = Weak<RefCell<T>>;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Node<T>
 where
     T: Index + Unique,
@@ -114,16 +123,18 @@ where
     }
 }
 
-pub struct Iter<'a, T: 'a> {
+pub struct Iter<'a, T: 'a, TRef> {
     inner: Option<Ref<'a, [NodeBox<T>]>>,
     context: &'a Context,
+    phantom: PhantomData<TRef>,
 }
 
-impl<'a, T> Iterator for Iter<'a, T>
+impl<'a, T, TRef> Iterator for Iter<'a, T, TRef>
 where
     T: Index + Unique,
+    TRef: IsRefFor<T>,
 {
-    type Item = Node<T>;
+    type Item = TRef;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.inner.is_none() {
@@ -137,7 +148,7 @@ where
                 Ref::map_split(borrow, |slice| slice.split_at(1));
             self.inner.replace(end);
             let head = Ref::map(begin, |slice| &slice[0]);
-            return Some(Node::new(self.context, Rc::clone(&head)));
+            return Some(TRef::new(Node::new(self.context, Rc::clone(&head))));
         }
         None
     }
@@ -155,14 +166,18 @@ pub trait Index {
     // Removes the referenced `T` it from a `Context`.
     fn remove(context: &mut Context, ptr: &NodeBox<Self>);
 
-    // Locates a `T` as it was indexed and returns the boxed reference.
-    fn search(context: &Context, uuid: &Uuid) -> Option<NodeBox<Self>>;
-
     // Determine if node is unrooted, i.e. has no parent node.
     fn rooted(ptr: NodeBox<Self>) -> bool;
 }
 
-pub fn read<P: AsRef<Path>>(path: P) -> Result<(Context, Node<IR>)> {
+pub trait IsRefFor<T>
+where
+    T: Index + Unique,
+{
+    fn new(node: Node<T>) -> Self;
+}
+
+pub fn read<P: AsRef<Path>>(path: P) -> Result<(Context, IRRef)> {
     // Read protobuf file.
     let bytes = std::fs::read(path)?;
     let message = proto::Ir::decode(&*bytes)?;

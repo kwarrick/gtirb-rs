@@ -17,18 +17,18 @@ pub struct ByteInterval {
 }
 
 impl ByteInterval {
-    pub fn new(context: &mut Context) -> Node<ByteInterval> {
+    pub fn new(context: &mut Context) -> ByteIntervalRef {
         let byte_interval = ByteInterval {
             uuid: Uuid::new_v4(),
             ..Default::default()
         };
-        context.add_node(byte_interval)
+        ByteIntervalRef::new(context.add_node(byte_interval))
     }
 
     pub(crate) fn load_protobuf(
         context: &mut Context,
         message: proto::ByteInterval,
-    ) -> Result<Node<ByteInterval>> {
+    ) -> Result<ByteIntervalRef> {
         let byte_interval = ByteInterval {
             uuid: crate::util::parse_uuid(&message.uuid)?,
             size: message.size,
@@ -40,7 +40,7 @@ impl ByteInterval {
             parent: WNodeBox::new(),
         };
 
-        let byte_interval = context.add_node(byte_interval);
+        let byte_interval = ByteIntervalRef::new(context.add_node(byte_interval));
 
         Ok(byte_interval)
     }
@@ -63,55 +63,62 @@ impl Unique for ByteInterval {
     }
 }
 
-impl Node<ByteInterval> {
+pub struct ByteIntervalRef {
+    pub(crate) node: Node<ByteInterval>,
+}
+
+impl ByteIntervalRef {
+    pub fn uuid(&self) -> Uuid {
+        self.node.borrow().uuid
+    }
+
     pub fn size(&self) -> u64 {
-        return self.borrow().size;
+        return self.node.borrow().size;
     }
 
     pub fn set_size(&mut self, n: u64) {
-        self.borrow_mut().size = n;
+        self.node.borrow_mut().size = n;
     }
 
     pub fn address(&self) -> Option<Addr> {
-        return self.borrow().address;
+        return self.node.borrow().address;
     }
 
     pub fn set_address(&mut self, address: Option<Addr>) {
-        self.borrow_mut().address = address;
+        self.node.borrow_mut().address = address;
     }
 
     pub fn initialized_size(&self) -> u64 {
-        self.borrow().bytes.len() as u64
+        self.node.borrow().bytes.len() as u64
     }
 
     pub fn set_initialized_size(&mut self, n: u64) {
-        self.borrow_mut().bytes.resize(n as usize, 0);
+        self.node.borrow_mut().bytes.resize(n as usize, 0);
         if n > self.size() {
             self.set_size(n);
         }
     }
 
     pub fn bytes(&self) -> Ref<[u8]> {
-        Ref::map(self.borrow(), |i| &i.bytes[..])
+        Ref::map(self.node.borrow(), |i| &i.bytes[..])
     }
 
     pub fn set_bytes<T: AsRef<[u8]>>(&mut self, bytes: T) {
-        self.borrow_mut().bytes = bytes.as_ref().to_vec();
+        self.node.borrow_mut().bytes = bytes.as_ref().to_vec();
     }
 
     pub fn add_code_block(
         &mut self,
-        code_block: Node<CodeBlock>,
-    ) -> Node<CodeBlock> {
-        code_block.inner.borrow_mut().set_parent(Some(&self.inner));
-        self.borrow_mut()
+        code_block: &CodeBlockRef,
+    ) {
+        code_block.node.inner.borrow_mut().set_parent(Some(&self.node.inner));
+        self.node.borrow_mut()
             .code_blocks
-            .push(Rc::clone(&code_block.inner));
-        code_block
+            .push(Rc::clone(&code_block.node.inner));
     }
 
-    pub fn remove_code_block(&self, uuid: Uuid) -> Option<Node<CodeBlock>> {
-        let mut byte_interval = self.inner.borrow_mut();
+    pub fn remove_code_block(&self, uuid: Uuid) -> Option<CodeBlockRef> {
+        let mut byte_interval = self.node.inner.borrow_mut();
         if let Some(pos) = byte_interval
             .code_blocks
             .iter()
@@ -119,43 +126,44 @@ impl Node<ByteInterval> {
         {
             let ptr = byte_interval.code_blocks.remove(pos);
             ptr.borrow_mut().set_parent(None);
-            Some(Node::new(&self.context, ptr))
+            Some(CodeBlockRef::new(Node::new(&self.node.context, ptr)))
         } else {
             None
         }
     }
 
-    pub fn code_blocks(&self) -> Iter<CodeBlock> {
+    pub fn code_blocks(&self) -> Iter<CodeBlock, CodeBlockRef> {
         Iter {
-            inner: Some(Ref::map(self.borrow(), |section| {
+            inner: Some(Ref::map(self.node.borrow(), |section| {
                 &section.code_blocks[..]
             })),
-            context: &self.context,
+            context: &self.node.context,
+            phantom: PhantomData,
         }
     }
 
-    pub fn data_blocks(&self) -> Iter<DataBlock> {
+    pub fn data_blocks(&self) -> Iter<DataBlock, DataBlockRef> {
         Iter {
-            inner: Some(Ref::map(self.borrow(), |section| {
+            inner: Some(Ref::map(self.node.borrow(), |section| {
                 &section.data_blocks[..]
             })),
-            context: &self.context,
+            context: &self.node.context,
+            phantom: PhantomData,
         }
     }
 
     pub fn add_data_block(
         &mut self,
-        data_block: Node<DataBlock>,
-    ) -> Node<DataBlock> {
-        data_block.inner.borrow_mut().set_parent(Some(&self.inner));
-        self.borrow_mut()
+        data_block: &DataBlockRef,
+    ) {
+        data_block.node.inner.borrow_mut().set_parent(Some(&self.node.inner));
+        self.node.borrow_mut()
             .data_blocks
-            .push(Rc::clone(&data_block.inner));
-        data_block
+            .push(Rc::clone(&data_block.node.inner));
     }
 
-    pub fn remove_data_block(&self, uuid: Uuid) -> Option<Node<DataBlock>> {
-        let mut byte_interval = self.inner.borrow_mut();
+    pub fn remove_data_block(&self, uuid: Uuid) -> Option<DataBlockRef> {
+        let mut byte_interval = self.node.inner.borrow_mut();
         if let Some(pos) = byte_interval
             .data_blocks
             .iter()
@@ -163,7 +171,7 @@ impl Node<ByteInterval> {
         {
             let ptr = byte_interval.data_blocks.remove(pos);
             ptr.borrow_mut().set_parent(None);
-            Some(Node::new(&self.context, ptr))
+            Some(DataBlockRef::new(Node::new(&self.node.context, ptr)))
         } else {
             None
         }
@@ -187,18 +195,14 @@ impl Index for ByteInterval {
         context.index.borrow_mut().byte_intervals.remove(&uuid);
     }
 
-    fn search(context: &Context, uuid: &Uuid) -> Option<NodeBox<Self>> {
-        context
-            .index
-            .borrow()
-            .byte_intervals
-            .get(uuid)
-            .map(|ptr| ptr.upgrade())
-            .flatten()
-    }
-
     fn rooted(ptr: NodeBox<Self>) -> bool {
         ptr.borrow().parent.upgrade().is_some()
+    }
+}
+
+impl IsRefFor<ByteInterval> for ByteIntervalRef {
+    fn new(node: Node<ByteInterval>) -> Self {
+        Self { node: node }
     }
 }
 
@@ -210,10 +214,12 @@ mod tests {
     fn can_set_attributes() {
         let mut ctx = Context::new();
         let mut ir = IR::new(&mut ctx);
-        let mut module = ir.add_module(Module::new(&mut ctx, "dummy"));
-        let mut section = module.add_section(Section::new(&mut ctx, ".dummy"));
-        let mut interval =
-            section.add_byte_interval(ByteInterval::new(&mut ctx));
+        let mut module = Module::new(&mut ctx, "dummy");
+        ir.add_module(&module);
+        let mut section = Section::new(&mut ctx, ".dummy");
+        module.add_section(&section);
+        let mut interval = ByteInterval::new(&mut ctx);
+        section.add_byte_interval(&interval);
         interval.set_size(0xDEAD);
         interval.set_address(Some(Addr(0xBEEF)));
         assert_eq!(interval.size(), 0xDEAD);
@@ -228,8 +234,8 @@ mod tests {
         let uuid1 = cb1.uuid();
         let cb2 = CodeBlock::new(&mut ctx);
         let uuid2 = cb2.uuid();
-        bi.add_code_block(cb1);
-        bi.add_code_block(cb2);
+        bi.add_code_block(&cb1);
+        bi.add_code_block(&cb2);
         assert_eq!(
             bi.code_blocks().map(|x| x.uuid()).collect::<Vec<Uuid>>(),
             vec![uuid1, uuid2]

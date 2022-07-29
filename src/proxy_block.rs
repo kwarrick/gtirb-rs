@@ -9,24 +9,24 @@ pub struct ProxyBlock {
 }
 
 impl ProxyBlock {
-    pub fn new(context: &mut Context) -> Node<ProxyBlock> {
+    pub fn new(context: &mut Context) -> ProxyBlockRef {
         let proxy_block = ProxyBlock {
             uuid: Uuid::new_v4(),
             ..Default::default()
         };
-        context.add_node(proxy_block)
+        ProxyBlockRef::new(context.add_node(proxy_block))
     }
 
     pub(crate) fn load_protobuf(
         context: &mut Context,
         message: proto::ProxyBlock,
-    ) -> Result<Node<ProxyBlock>> {
+    ) -> Result<ProxyBlockRef> {
         let proxy_block = ProxyBlock {
             parent: None,
             uuid: crate::util::parse_uuid(&message.uuid)?,
         };
 
-        let proxy_block = context.add_node(proxy_block);
+        let proxy_block = ProxyBlockRef::new(context.add_node(proxy_block));
 
         Ok(proxy_block)
     }
@@ -42,7 +42,15 @@ impl Unique for ProxyBlock {
     }
 }
 
-impl Node<ProxyBlock> {}
+pub struct ProxyBlockRef {
+    pub(crate) node: Node<ProxyBlock>,
+}
+
+impl ProxyBlockRef {
+    pub fn uuid(&self) -> Uuid {
+        self.node.borrow().uuid
+    }
+}
 
 impl Index for ProxyBlock {
     fn insert(context: &mut Context, node: Self) -> NodeBox<Self> {
@@ -61,17 +69,13 @@ impl Index for ProxyBlock {
         context.index.borrow_mut().modules.remove(&uuid);
     }
 
-    fn search(context: &Context, uuid: &Uuid) -> Option<NodeBox<Self>> {
-        context
-            .index
-            .borrow()
-            .proxy_blocks
-            .get(uuid)
-            .map(|ptr| ptr.upgrade())
-            .flatten()
-    }
-
     fn rooted(ptr: NodeBox<Self>) -> bool {
         ptr.borrow().parent.is_some()
+    }
+}
+
+impl IsRefFor<ProxyBlock> for ProxyBlockRef {
+    fn new(node: Node<ProxyBlock>) -> Self {
+        Self { node: node }
     }
 }
