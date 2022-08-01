@@ -13,3 +13,4 @@ generational-arena = "0.2.8"
 prost = "0.7.0"
 structopt = "0.3"
 uuid = { version = "0.8.1", features = ["v4"] }
+gtirb-derive = { path = "gtirb-derive" }

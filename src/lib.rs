@@ -61,65 +61,23 @@ mod util;
 type NodeBox<T> = Rc<RefCell<T>>;
 type WNodeBox<T> = Weak<RefCell<T>>;
 
-#[derive(Clone, Debug)]
-pub struct Node<T>
+pub trait Node<T>
 where
-    T: Index + Unique,
+    T: Unique,
 {
-    inner: NodeBox<T>,
-    context: Context,
-}
-
-impl<T> Node<T>
-where
-    T: Index + Unique,
-{
-    fn new(context: &Context, ptr: NodeBox<T>) -> Self {
-        Node {
-            inner: NodeBox::clone(&ptr),
-            context: context.clone(),
-        }
-    }
+    fn get_inner(&self) -> &NodeBox<T>;
+    fn get_context(&self) -> &Context;
 
     fn borrow(&self) -> Ref<T> {
-        self.inner.borrow()
+        self.get_inner().borrow()
     }
 
     fn borrow_mut(&mut self) -> RefMut<T> {
-        self.inner.borrow_mut()
+        self.get_inner().borrow_mut()
     }
 
     fn uuid(&self) -> Uuid {
-        self.inner.borrow().uuid()
-    }
-
-    fn set_uuid(&mut self, uuid: Uuid) {
-        self.inner.borrow_mut().set_uuid(uuid);
-    }
-}
-
-impl<T> Drop for Node<T>
-where
-    T: Index + Unique,
-{
-    fn drop(&mut self) {
-        // Remove from the context when we're dropping the
-        // only extant reference to the Node.
-        // Note: This will need to be handled differently
-        // if we ever support Arc's.
-        if Rc::strong_count(&self.inner) == 1 {
-             T::remove(&mut self.context, &self.inner);
-        }
-    }
-}
-
-impl<T> PartialEq for Node<T>
-where
-    T: Index + Unique,
-{
-    // Pointer equality
-    fn eq(&self, other: &Self) -> bool {
-        Rc::ptr_eq(&self.inner, &other.inner)
+        self.get_inner().borrow().uuid()
     }
 }
 
@@ -131,7 +89,7 @@ pub struct Iter<'a, T: 'a, TRef> {
 
 impl<'a, T, TRef> Iterator for Iter<'a, T, TRef>
 where
-    T: Index + Unique,
+    T: Unique,
     TRef: IsRefFor<T>,
 {
     type Item = TRef;
@@ -148,7 +106,7 @@ where
                 Ref::map_split(borrow, |slice| slice.split_at(1));
             self.inner.replace(end);
             let head = Ref::map(begin, |slice| &slice[0]);
-            return Some(TRef::new(Node::new(self.context, Rc::clone(&head))));
+            return Some(TRef::new(self.context, Rc::clone(&head)));
         }
         None
     }
@@ -156,25 +114,14 @@ where
 
 pub trait Unique {
     fn uuid(&self) -> Uuid;
-    fn set_uuid(&mut self, uuid: Uuid);
-}
-
-pub trait Index {
-    // Consumes a `T`,  attaches it to a `Context`, and returns a boxed reference.
-    fn insert(context: &mut Context, node: Self) -> NodeBox<Self>;
-
-    // Removes the referenced `T` it from a `Context`.
-    fn remove(context: &mut Context, ptr: &NodeBox<Self>);
-
-    // Determine if node is unrooted, i.e. has no parent node.
-    fn rooted(ptr: NodeBox<Self>) -> bool;
 }
 
 pub trait IsRefFor<T>
 where
-    T: Index + Unique,
+    T: Unique,
+    Self: Node<T>,
 {
-    fn new(node: Node<T>) -> Self;
+    fn new(context: &Context, node: NodeBox<T>) -> Self;
 }
 
 pub fn read<P: AsRef<Path>>(path: P) -> Result<(Context, IRRef)> {

@@ -4,7 +4,7 @@ use anyhow::{anyhow, Result};
 
 use crate::*;
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, gtirb_derive::Node)]
 pub struct Section {
     uuid: Uuid,
     name: String,
@@ -20,7 +20,7 @@ impl Section {
             name: name.to_owned(),
             ..Default::default()
         };
-        SectionRef::new(context.add_node(section))
+        context.add_section(section)
     }
 
     pub(crate) fn load_protobuf(
@@ -44,66 +44,41 @@ impl Section {
             byte_intervals: Vec::new(),
         };
 
-        let mut section = SectionRef::new(context.add_node(section));
+        let mut section = context.add_section(section);
 
         // Load ByteInterval protobuf messages.
         for m in message.byte_intervals.into_iter() {
-            let byte_interval = ByteInterval::load_protobuf(context, m)?;
-            section.add_byte_interval(&byte_interval);
+            let mut byte_interval = ByteInterval::load_protobuf(context, m)?;
+            section.add_byte_interval(&mut byte_interval);
         }
 
         Ok(section)
     }
-
-    pub(crate) fn set_parent(&mut self, parent: Option<&NodeBox<Module>>) {
-        self.parent = match parent {
-            Some(ptr) => Rc::downgrade(ptr),
-            None => WNodeBox::new(),
-        }
-    }
-}
-
-impl Unique for Section {
-    fn uuid(&self) -> Uuid {
-        self.uuid
-    }
-
-    fn set_uuid(&mut self, uuid: Uuid) {
-        self.uuid = uuid;
-    }
-}
-
-pub struct SectionRef {
-    pub(crate) node: Node<Section>,
 }
 
 impl SectionRef {
-    pub fn uuid(&self) -> Uuid {
-        self.node.borrow().uuid
-    }
-
     pub fn name(&self) -> String {
-        self.node.borrow().name.to_owned()
+        self.borrow().name.to_owned()
     }
 
     pub fn set_name<T: AsRef<str>>(&mut self, name: T) {
-        self.node.borrow_mut().name = name.as_ref().to_owned();
+        self.borrow_mut().name = name.as_ref().to_owned();
     }
 
     pub fn flags(&self) -> HashSet<SectionFlag> {
-        self.node.borrow().flags.clone()
+        self.borrow().flags.clone()
     }
 
     pub fn add_flag(&mut self, flag: SectionFlag) {
-        self.node.borrow_mut().flags.insert(flag);
+        self.borrow_mut().flags.insert(flag);
     }
 
     pub fn remove_flag(&mut self, flag: SectionFlag) {
-        self.node.borrow_mut().flags.remove(&flag);
+        self.borrow_mut().flags.remove(&flag);
     }
 
     pub fn is_flag_set(&self, flag: SectionFlag) -> bool {
-        self.node.borrow().flags.contains(&flag)
+        self.borrow().flags.contains(&flag)
     }
 
     pub fn size(&self) -> Option<u64> {
@@ -125,23 +100,20 @@ impl SectionRef {
         self.byte_intervals().map(|i| i.address()).min().flatten()
     }
 
-    pub fn add_byte_interval(&mut self, byte_interval: &ByteIntervalRef) {
+    pub fn add_byte_interval(&mut self, byte_interval: &mut ByteIntervalRef) {
         byte_interval
-            .node
-            .inner
             .borrow_mut()
-            .set_parent(Some(&self.node.inner));
-        self.node
-            .borrow_mut()
+            .set_parent(Some(&self.inner));
+        self.borrow_mut()
             .byte_intervals
-            .push(Rc::clone(&byte_interval.node.inner));
+            .push(Rc::clone(&byte_interval.get_inner()));
     }
 
     pub fn remove_byte_interval(
         &self,
         uuid: Uuid,
     ) -> Option<ByteIntervalRef> {
-        let mut section = self.node.inner.borrow_mut();
+        let mut section = self.inner.borrow_mut();
         if let Some(pos) = section
             .byte_intervals
             .iter()
@@ -149,7 +121,7 @@ impl SectionRef {
         {
             let ptr = section.byte_intervals.remove(pos);
             ptr.borrow_mut().set_parent(None);
-            Some(ByteIntervalRef::new(Node::new(&self.node.context, ptr)))
+            Some(ByteIntervalRef::new(&self.context, ptr))
         } else {
             None
         }
@@ -157,10 +129,10 @@ impl SectionRef {
 
     pub fn byte_intervals(&self) -> Iter<ByteInterval, ByteIntervalRef> {
         Iter {
-            inner: Some(Ref::map(self.node.borrow(), |section| {
+            inner: Some(Ref::map(self.borrow(), |section| {
                 &section.byte_intervals[..]
             })),
-            context: &self.node.context,
+            context: &self.context,
             phantom: PhantomData,
         }
     }
@@ -192,34 +164,6 @@ impl SectionRef {
     // }
 }
 
-impl Index for Section {
-    fn insert(context: &mut Context, node: Self) -> NodeBox<Self> {
-        let uuid = node.uuid();
-        let boxed = Rc::new(RefCell::new(node));
-        context
-            .index
-            .borrow_mut()
-            .sections
-            .insert(uuid, Rc::downgrade(&boxed));
-        boxed
-    }
-
-    fn remove(context: &mut Context, ptr: &NodeBox<Self>) {
-        let uuid = ptr.borrow().uuid();
-        context.index.borrow_mut().modules.remove(&uuid);
-    }
-
-    fn rooted(ptr: NodeBox<Self>) -> bool {
-        ptr.borrow().parent.upgrade().is_some()
-    }
-}
-
-impl IsRefFor<Section> for SectionRef {
-    fn new(node: Node<Section>) -> Self {
-        Self { node: node }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -229,9 +173,9 @@ mod tests {
         let mut ctx = Context::new();
         let mut ir = IR::new(&mut ctx);
         let mut module = Module::new(&mut ctx, "dummy");
-        ir.add_module(&module);
+        ir.add_module(&mut module);
         let mut section = Section::new(&mut ctx, ".text");
-        module.add_section(&section);
+        module.add_section(&mut section);
         assert_eq!(section.name(), ".text");
 
         section.set_name(".data");
@@ -243,9 +187,9 @@ mod tests {
         let mut ctx = Context::new();
         let mut ir = IR::new(&mut ctx);
         let mut module = Module::new(&mut ctx, "dummy");
-        ir.add_module(&module);
+        ir.add_module(&mut module);
         let mut section = Section::new(&mut ctx, ".text");
-        module.add_section(&section);
+        module.add_section(&mut section);
         assert_eq!(section.name(), ".text");
 
         assert!(section.flags().is_empty());
@@ -263,28 +207,28 @@ mod tests {
         let mut ctx = Context::new();
         let mut ir = IR::new(&mut ctx);
         let mut module = Module::new(&mut ctx, "dummy");
-        ir.add_module(&module);
+        ir.add_module(&mut module);
 
         let mut section = Section::new(&mut ctx, ".text");
-        module.add_section(&section);
+        module.add_section(&mut section);
         assert_eq!(section.size(), None);
         assert_eq!(section.address(), None);
 
         let mut byte_interval = ByteInterval::new(&mut ctx);
-        section.add_byte_interval(&byte_interval);
+        section.add_byte_interval(&mut byte_interval);
         byte_interval.set_address(Some(Addr(5)));
         byte_interval.set_size(10);
         assert_eq!(section.size(), Some(10));
         assert_eq!(section.address(), Some(Addr(5)));
 
         let mut byte_interval = ByteInterval::new(&mut ctx);
-        section.add_byte_interval(&byte_interval);
+        section.add_byte_interval(&mut byte_interval);
         byte_interval.set_address(Some(Addr(15)));
         byte_interval.set_size(10);
         assert_eq!(section.size(), Some(20));
         assert_eq!(section.address(), Some(Addr(5)));
 
-        section.add_byte_interval(&ByteInterval::new(&mut ctx));
+        section.add_byte_interval(&mut ByteInterval::new(&mut ctx));
         assert_eq!(section.size(), None);
         assert_eq!(section.address(), None);
     }
